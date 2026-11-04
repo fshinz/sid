@@ -1,0 +1,24 @@
+{
+"format": 1,
+"id": "shin.dev-lab",
+"name": "DevLab",
+"description": "everything a developer needs",
+"author": "shin <1381008677301129257> (https://github.com/fshinz/Valenced-Plugins-made-By-fshin \"Source code\")",
+"contributors": ["k1ng_op <641266820187160576> (https://github.com/k1ng0p \"GitHub\")"],
+"version": "1.1.0",
+"icon": "WrenchIcon",
+
+"dependencies": {
+    "valenced.api": {
+        "version": ">=1 <2"
+    },
+    "discord": {
+        "version": "*"
+    }
+},
+
+"dist": {
+    "script": "index.js"
+}
+
+}
