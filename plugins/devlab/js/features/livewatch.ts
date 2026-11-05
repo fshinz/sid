@@ -1,3 +1,5 @@
+import { SENSITIVE_KEY, safeJsonStringify, safely, sanitize } from './sanitize'
+
 export type WatchEntry = {
 	id: string
 	storeName: string
@@ -14,13 +16,8 @@ type Watch = {
 }
 
 export const MAX_LOG = 100
-const MAX_DEPTH = 4
-const MAX_ARRAY_ITEMS = 40
 const MAX_OBJECT_KEYS = 80
-const MAX_STRING_LENGTH = 4000
 const WATCH_INTERVAL = 1000
-const SENSITIVE_KEY =
-	/(token|authorization|password|secret|cookie|session.?id|api.?key|credential)/i
 
 // Cheap getters worth reading so changes show up even when the backing fields are private.
 const STATE_GETTERS = [
@@ -42,55 +39,6 @@ function getStores(): Record<string, any> {
 
 export function getAllStoreNames() {
 	return Object.keys(getStores()).sort((a, b) => a.localeCompare(b))
-}
-
-function safely<T>(callback: () => T): T | undefined {
-	try {
-		return callback()
-	} catch {
-		return undefined
-	}
-}
-
-function sanitize(value: any, depth = 0, seen = new WeakSet<object>()): any {
-	if (value === null || value === undefined) return value
-	if (typeof value === 'string') {
-		return value.length > MAX_STRING_LENGTH
-			? `${value.slice(0, MAX_STRING_LENGTH)}… [truncated]`
-			: value
-	}
-	if (typeof value === 'number' || typeof value === 'boolean') return value
-	if (typeof value === 'bigint') return `${value}n`
-	if (typeof value === 'function') {
-		return `[Function ${value.name || 'anonymous'}]`
-	}
-	if (typeof value !== 'object') return String(value)
-	if (depth >= MAX_DEPTH) return '[Max depth reached]'
-	if (seen.has(value)) return '[Circular reference]'
-
-	seen.add(value)
-	try {
-		if (Array.isArray(value)) {
-			return value
-				.slice(0, MAX_ARRAY_ITEMS)
-				.map(item => sanitize(item, depth + 1, seen))
-		}
-
-		const keys = safely(() => Object.keys(value)) ?? []
-		const result: Record<string, any> = {}
-		for (const key of keys.slice(0, MAX_OBJECT_KEYS)) {
-			result[key] = SENSITIVE_KEY.test(key)
-				? '[REDACTED]'
-				: (safely(() => sanitize(value[key], depth + 1, seen)) ??
-					'[Unable to read property]')
-		}
-		if (keys.length > MAX_OBJECT_KEYS) {
-			result['…'] = '[Additional properties omitted]'
-		}
-		return result
-	} finally {
-		seen.delete(value)
-	}
 }
 
 function snapshotStore(storeName: string): unknown {
@@ -139,20 +87,12 @@ function snapshotStore(storeName: string): unknown {
 	}
 }
 
-function serialize(snapshot: unknown) {
-	try {
-		return JSON.stringify(snapshot)
-	} catch {
-		return String(snapshot)
-	}
-}
-
 function emit(storeName: string, snapshot: unknown) {
 	const entry: WatchEntry = {
 		id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
 		storeName,
 		timestamp: Date.now(),
-		snapshot: serialize(snapshot),
+		snapshot: safeJsonStringify(snapshot),
 	}
 
 	eventLog.unshift(entry)
@@ -191,10 +131,10 @@ export function watchStore(storeName: string) {
 
 	// Polling catches stores that don't expose change listeners.
 	const watch: Watch = {
-		lastSnapshot: serialize(initial),
+		lastSnapshot: safeJsonStringify(initial),
 		interval: setInterval(() => {
 			const snapshot = snapshotStore(storeName)
-			const serialized = serialize(snapshot)
+			const serialized = safeJsonStringify(snapshot)
 			if (serialized === watch.lastSnapshot) return
 			watch.lastSnapshot = serialized
 			emit(storeName, snapshot)
@@ -206,7 +146,7 @@ export function watchStore(storeName: string) {
 		// A store-signalled change is logged even if the visible snapshot looks identical.
 		const onChange = () => {
 			const snapshot = snapshotStore(storeName)
-			watch.lastSnapshot = serialize(snapshot)
+			watch.lastSnapshot = safeJsonStringify(snapshot)
 			emit(storeName, snapshot)
 		}
 		safely(() => store.addChangeListener(onChange))

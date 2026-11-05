@@ -1,4 +1,5 @@
 import { CompatibilityTab } from './tabs/CompatibilityTab'
+import { FluxTab } from './tabs/FluxTab'
 import { SandboxTab } from './tabs/SandboxTab'
 import { WatchTab } from './tabs/WatchTab'
 
@@ -14,6 +15,12 @@ export const TOOLS = [
 		title: 'Watch',
 		description: 'Monitor Flux stores for changes.',
 		Screen: WatchTab,
+	},
+	{
+		route: 'shin.devlab.flux',
+		title: 'Flux Tracker',
+		description: 'Log every Flux dispatch live.',
+		Screen: FluxTab,
 	},
 	{
 		route: 'shin.devlab.sandbox',
