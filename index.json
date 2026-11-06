@@ -38,12 +38,25 @@
       ],
       "icon": "WrenchIcon",
       "channels": {
-        "latest": "1.2.0"
+        "latest": "1.2.3"
       },
       "versions": {
         "1.2.0": {
           "url": "https://fshinz.github.io/sid/pool/shin.dev-lab@1.2.0.zip",
           "sha256": "8d7d96d3180e306121b7a030a6b9714ff6348bc2e14183ea73c2cd75296e0d05",
+          "size": 16385,
+          "dependencies": {
+            "valenced.api": {
+              "version": ">=1 <2"
+            },
+            "discord": {
+              "version": "*"
+            }
+          }
+        },
+        "1.2.3": {
+          "url": "https://fshinz.github.io/sid/pool/shin.dev-lab@1.2.3.zip",
+          "sha256": "22dfb3a772c5b3db9e9b30342f299137ffaffb7ea4c164db56c9dee0212d8146",
           "size": 16385,
           "dependencies": {
             "valenced.api": {
