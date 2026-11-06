@@ -1,6 +1,8 @@
 import * as settings from '@valenced/discord/modules/settings'
 import { lookupGeneratedIconComponent } from '@valenced/utils/discord'
 import { setPluginApi } from './api'
+import { mountOverlayHost } from './features/approot'
+import { startFluxLog, stopFluxLog } from './features/fluxlog'
 import { DevLabSettings } from './settings'
 import { bindStorage, recordError } from './storage'
 import { TOOLS } from './tools'
@@ -65,6 +67,14 @@ export default plugin<{ jsonStorage: DevLabState }>({
 		cleanup(() => {
 			if (previousHandler) errorUtils?.setGlobalHandler?.(previousHandler)
 		})
+
+		// Flux dispatches are tracked from startup so the log is complete.
+		startFluxLog()
+		cleanup(stopFluxLog)
+
+		// Hosts the highlight overlay at the app root when possible, so token
+		// highlights stay visible outside DevLab.
+		mountOverlayHost(cleanup)
 
 		// DevLab also gets its own row in Discord settings :>
 		const undo: Array<() => void> = []
