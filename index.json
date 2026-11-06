@@ -1,0 +1,60 @@
+{
+  "format": 1,
+  "name": "shin's plugs",
+  "description": ":3",
+  "plugins": {
+    "shin.black-themes": {
+      "name": "black theme",
+      "description": "just a cool black theme",
+      "author": "shin <1381008677301129257>",
+      "channels": {
+        "latest": "1.0.2"
+      },
+      "versions": {
+        "1.0.2": {
+          "url": "https://fshinz.github.io/sid/pool/shin.black-themes@1.0.2.zip",
+          "sha256": "6e7a527c84105f2d6575306ef649f5a5a181de7c047f8393f2927f44afa0104b",
+          "size": 1914,
+          "dependencies": {
+            "valenced.api": {
+              "version": ">=1 <2"
+            },
+            "discord": {
+              "version": "*"
+            },
+            "valenced.api.themes": {
+              "version": "*"
+            }
+          }
+        }
+      }
+    },
+    "shin.dev-lab": {
+      "name": "DevLab",
+      "description": "everything a developer needs",
+      "author": "shin <1381008677301129257> (https://github.com/fshinz/Valenced-Plugins-made-By-fshin \"Source code\")",
+      "contributors": [
+        "k1ng_op <641266820187160576> (https://github.com/k1ng0p \"GitHub\")"
+      ],
+      "icon": "WrenchIcon",
+      "channels": {
+        "latest": "1.2.0"
+      },
+      "versions": {
+        "1.2.0": {
+          "url": "https://fshinz.github.io/sid/pool/shin.dev-lab@1.2.0.zip",
+          "sha256": "8d7d96d3180e306121b7a030a6b9714ff6348bc2e14183ea73c2cd75296e0d05",
+          "size": 16385,
+          "dependencies": {
+            "valenced.api": {
+              "version": ">=1 <2"
+            },
+            "discord": {
+              "version": "*"
+            }
+          }
+        }
+      }
+    }
+  }
+}
