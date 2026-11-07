@@ -1,4 +1,5 @@
 import type { JsonStorage } from '@valenced/json-storage'
+import type { InspectPrefs } from './features/inspect'
 
 export type DiagnosticEntry = {
 	id: string
@@ -13,6 +14,7 @@ export type DiagnosticEntry = {
 export type DevLabState = {
 	entries: DiagnosticEntry[]
 	enabled: boolean
+	inspect?: InspectPrefs
 }
 
 let storage: JsonStorage<DevLabState> | undefined
@@ -35,6 +37,17 @@ function isEntry(value: unknown): value is DiagnosticEntry {
 	)
 }
 
+function normalizeInspect(value: unknown): InspectPrefs | undefined {
+	if (!value || typeof value !== 'object') return undefined
+	const raw = value as Partial<InspectPrefs>
+	return {
+		enabled: raw.enabled === true,
+		mode: raw.mode === 'token' ? 'token' : 'element',
+		copyOnTap: raw.copyOnTap === true,
+		showButton: raw.showButton !== false,
+	}
+}
+
 function normalizeState(value: unknown): DevLabState {
 	if (!value || typeof value !== 'object') return { entries: [], enabled: true }
 	const raw = value as Partial<DevLabState>
@@ -43,10 +56,17 @@ function normalizeState(value: unknown): DevLabState {
 			? raw.entries.filter(isEntry).slice(0, MAX_ENTRIES)
 			: [],
 		enabled: raw.enabled !== false,
+		inspect: normalizeInspect(raw.inspect),
 	}
 }
 
 export function readState(): DevLabState {
+	return normalizeState(storage?.use())
+}
+
+/** Waits for the async load, then reads — for restoring prefs at startup. */
+export async function readStateWhenLoaded(): Promise<DevLabState> {
+	await waitUntilLoaded()
 	return normalizeState(storage?.use())
 }
 
@@ -76,6 +96,11 @@ export function saveState(next: DevLabState) {
 	})
 	writeQueue = job.catch(() => {})
 	return job
+}
+
+export function saveInspectPrefs(prefs: InspectPrefs) {
+	const current = readCachedState()
+	return saveState({ ...current, inspect: prefs })
 }
 
 export async function recordError(error: unknown, context = 'DevLab') {

@@ -1,10 +1,22 @@
 import * as settings from '@valenced/discord/modules/settings'
 import { lookupGeneratedIconComponent } from '@valenced/utils/discord'
 import { setPluginApi } from './api'
-import { mountOverlayHost } from './features/approot'
+import { attachOverlay } from './components/FloatingPill'
 import { startFluxLog, stopFluxLog } from './features/fluxlog'
+import {
+	applyInspectPrefs,
+	findJsxRuntime,
+	setInspectSaver,
+	shutdown,
+} from './features/inspect'
+import { findTokens } from './features/tokens'
 import { DevLabSettings } from './settings'
-import { bindStorage, recordError } from './storage'
+import {
+	bindStorage,
+	readStateWhenLoaded,
+	recordError,
+	saveInspectPrefs,
+} from './storage'
 import { TOOLS } from './tools'
 import type { DevLabState } from './storage'
 
@@ -72,9 +84,15 @@ export default plugin<{ jsonStorage: DevLabState }>({
 		startFluxLog()
 		cleanup(stopFluxLog)
 
-		// Hosts the highlight overlay at the app root when possible, so token
-		// highlights stay visible outside DevLab.
-		mountOverlayHost(cleanup)
+		// Color tokens, tap logging, and the floating pill overlay.
+		cleanup(findTokens())
+		cleanup(findJsxRuntime())
+		setInspectSaver(prefs => {
+			void saveInspectPrefs(prefs)
+		})
+		attachOverlay(cleanup)
+		cleanup(shutdown)
+		void readStateWhenLoaded().then(state => applyInspectPrefs(state.inspect))
 
 		// DevLab also gets its own row in Discord settings :>
 		const undo: Array<() => void> = []

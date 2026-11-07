@@ -1,6 +1,6 @@
 import { ReactNative } from '@valenced/react'
-import { canonicalColor } from './colors'
 import { safely } from './sanitize'
+import { normalizeColor } from './tokens'
 
 export type Rect = {
 	x: number
@@ -11,7 +11,8 @@ export type Rect = {
 
 export type StyleColor = {
 	key: string
-	canonical: string | null
+	/** Normalized lowercase `#rrggbb` or `#rrggbbaa`, or null. */
+	normalized: string | null
 	value: unknown
 }
 
@@ -52,7 +53,10 @@ export function registerSkipRoot(fiber: Fiber) {
 /** Registers the subtree of a mounted class instance as DevLab-internal UI. */
 export function registerSkipRootOf(instance: unknown) {
 	const fiber = fiberOf(instance)
-	if (fiber) skipRoots.add(fiber)
+	if (fiber) {
+		skipRoots.add(fiber)
+		captureFromInstance(instance)
+	}
 	return fiber ?? null
 }
 
@@ -151,7 +155,7 @@ export function styleColors(fiber: Fiber): StyleColor[] {
 	const push = (key: string, value: unknown) => {
 		if (value === null || value === undefined || seen.has(key)) return
 		seen.add(key)
-		out.push({ key, canonical: canonicalColor(value), value })
+		out.push({ key, normalized: normalizeColor(value) ?? null, value })
 	}
 
 	let flat: any = props.style
@@ -211,71 +215,15 @@ export function measureFiber(fiber: Fiber): Promise<Rect | null> {
 	})
 }
 
-function rectContains(rect: Rect, x: number, y: number) {
-	return (
-		x >= rect.x &&
-		x <= rect.x + rect.width &&
-		y >= rect.y &&
-		y <= rect.y + rect.height
-	)
-}
-
-export type LayoutEntry = {
-	fiber: Fiber
-	chain: string[]
-	rect: Rect
-}
-
-/** Measures every host node. Slow, so callers should keep the result short-lived. */
-export async function buildLayoutIndex(
-	onProgress?: (done: number) => void,
-): Promise<LayoutEntry[]> {
-	const fibers: Fiber[] = []
-	for (const fiber of walkHostFibers()) fibers.push(fiber)
-
-	const entries: LayoutEntry[] = []
-	for (let start = 0; start < fibers.length; start += MEASURE_CHUNK) {
-		const chunk = fibers.slice(start, start + MEASURE_CHUNK)
-		const rects = await Promise.all(chunk.map(measureFiber))
-		for (let i = 0; i < chunk.length; i++) {
-			const rect = rects[i]
-			if (!rect || rect.width <= 0 || rect.height <= 0) continue
-			entries.push({ fiber: chunk[i], chain: componentChain(chunk[i]), rect })
-		}
-		onProgress?.(Math.min(start + MEASURE_CHUNK, fibers.length))
-	}
-	return entries
-}
-
-/** Deepest, smallest element under the point wins. */
-export function hitTestLayout(
-	entries: LayoutEntry[],
-	x: number,
-	y: number,
-): LayoutEntry | null {
-	let best: LayoutEntry | null = null
-	let bestArea = Infinity
-
-	for (const entry of entries) {
-		if (!rectContains(entry.rect, x, y)) continue
-		const area = entry.rect.width * entry.rect.height
-		if (area < bestArea) {
-			best = entry
-			bestArea = area
-		}
-	}
-	return best
-}
-
-/** Visible elements using the given canonical color, with their rects. */
+/** Visible elements using the given normalized color, with their rects. */
 export async function findElementsWithColor(
-	canonical: string,
+	normalized: string,
 	onProgress?: (found: number) => void,
 ): Promise<{ fiber: Fiber; chain: string[]; rect: Rect | null }[]> {
 	const matches: Fiber[] = []
 	for (const fiber of walkHostFibers()) {
 		const colors = styleColors(fiber)
-		if (colors.some(color => color.canonical === canonical)) {
+		if (colors.some(color => color.normalized === normalized)) {
 			matches.push(fiber)
 		}
 	}
@@ -304,7 +252,7 @@ export function scanColoredElements(limit = 200): {
 }[] {
 	const out: { fiber: Fiber; chain: string[]; colors: StyleColor[] }[] = []
 	for (const fiber of walkHostFibers()) {
-		const colors = styleColors(fiber).filter(color => color.canonical)
+		const colors = styleColors(fiber).filter(color => color.normalized)
 		if (colors.length === 0) continue
 		out.push({ fiber, chain: componentChain(fiber), colors })
 		if (out.length >= limit) break
