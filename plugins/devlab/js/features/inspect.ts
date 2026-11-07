@@ -3,7 +3,7 @@ import { Clipboard } from '@valenced/externals/react-native-clipboard'
 import { getModules } from '@valenced/modules/finders'
 import { withProps } from '@valenced/modules/finders/filters'
 import { before } from '@valenced/patcher'
-import { React, ReactNative } from '@valenced/react'
+import { React } from '@valenced/react'
 import { analyzeColor, currentTheme, tokenLabel } from './tokens'
 import type { Analysis } from './tokens'
 
@@ -57,6 +57,9 @@ function emit() {
 	}
 }
 
+/** Re-renders DevLab screens without persisting anything. */
+export const notifyChange = emit
+
 const STYLE_KEYS = [
 	'backgroundColor',
 	'color',
@@ -91,23 +94,43 @@ function typeName(type: any): string | undefined {
 	}
 }
 
+// Style objects are usually static (StyleSheet.create), so cache their color
+// entries by identity instead of flattening on every render.
+const styleEntriesCache = new WeakMap<object, [string, unknown][]>()
+
+function styleEntries(style: any): [string, unknown][] {
+	if (!style || typeof style !== 'object') return []
+
+	const cached = styleEntriesCache.get(style)
+	if (cached) return cached
+
+	const collected = new Map<string, unknown>()
+	const grab = (part: any) => {
+		if (!part || typeof part !== 'object') return
+		for (const k of STYLE_KEYS) {
+			const v = part[k]
+			if (v != null && v !== 'transparent') collected.set(k, v)
+		}
+	}
+
+	if (Array.isArray(style)) {
+		for (const part of style) grab(part)
+	} else {
+		grab(style)
+	}
+
+	const out: [string, unknown][] = [...collected.entries()].map(([k, v]) => [
+		`style.${k}`,
+		v,
+	])
+	styleEntriesCache.set(style, out)
+	return out
+}
+
 function readColors(props: any): [string, unknown][] {
 	const out: [string, unknown][] = []
 
-	let style = props.style
-	if (style) {
-		try {
-			style = ReactNative.StyleSheet.flatten(style)
-		} catch {
-			// Keep as is.
-		}
-		if (style && typeof style === 'object') {
-			for (const k of STYLE_KEYS) {
-				const v = style[k]
-				if (v != null && v !== 'transparent') out.push([`style.${k}`, v])
-			}
-		}
-	}
+	if (props.style) out.push(...styleEntries(props.style))
 
 	for (const k of PROP_KEYS) {
 		const v = props[k]
