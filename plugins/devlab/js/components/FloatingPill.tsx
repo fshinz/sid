@@ -5,6 +5,7 @@ import { getModules } from '@valenced/modules/finders'
 import { withName } from '@valenced/modules/finders/filters'
 import { instead } from '@valenced/patcher'
 import { React, ReactNative } from '@valenced/react'
+import { getHighlight, stopHighlight } from '../features/highlight'
 import {
 	inspectState,
 	markMenuClosed,
@@ -36,6 +37,7 @@ function truncate(s: string, n: number) {
 export function openMenu() {
 	const { AlertModal, AlertActionButton, Text } = Design
 	const last = inspectState.history[0]
+	const highlight = getHighlight()
 	const on = inspectState.enabled
 	const mode = inspectState.mode
 
@@ -84,6 +86,13 @@ export function openMenu() {
 								onPress: done(() => setInspecting(false)),
 							})
 						: null,
+					highlight
+						? h(AlertActionButton, {
+								text: 'Stop highlighting',
+								variant: 'secondary',
+								onPress: done(stopHighlight),
+							})
+						: null,
 					last
 						? h(AlertActionButton, {
 								text: 'Copy last result',
@@ -118,9 +127,11 @@ function FloatingButton() {
 
 	const [, rerender] = React.useReducer((n: number) => n + 1, 0)
 	const start = React.useRef({ x: 0, y: 0 })
+	const boxRef = React.useRef<any>(null)
 
 	React.useEffect(() => subscribe(rerender), [])
 
+	// Dragging moves the native view directly — no React re-render per frame.
 	const pan = React.useMemo(
 		() =>
 			PanResponder.create({
@@ -134,7 +145,9 @@ function FloatingButton() {
 					const { width, height } = Dimensions.get('window')
 					fabPos.x = clamp(start.current.x + g.dx, 0, width - SIZE)
 					fabPos.y = clamp(start.current.y + g.dy, 0, height - SIZE)
-					rerender()
+					boxRef.current?.setNativeProps?.({
+						style: { left: fabPos.x, top: fabPos.y },
+					})
 				},
 			}),
 		[],
@@ -153,6 +166,7 @@ function FloatingButton() {
 		View,
 		{
 			...pan.panHandlers,
+			ref: boxRef,
 			// Runs after the inner elements' handlers, so it can discard the tap on itself.
 			onTouchStart: suppressBatch,
 			style: {
@@ -192,8 +206,12 @@ function FloatingButton() {
 // Only one mount point draws the widgets, whichever renders first.
 let activeMount: string | undefined
 
-/** Floating pill + highlight overlay. Renders from any mount point, once. */
+/** Floating pill + highlight badge. Renders from any mount point, once. */
 export function OverlayWidgets({ mount }: { mount: string }) {
+	// Subscribing here makes show/hide and menu state changes apply immediately.
+	const [, rerender] = React.useReducer((n: number) => n + 1, 0)
+	React.useEffect(() => subscribe(rerender), [])
+
 	if (activeMount && activeMount !== mount) return null
 	activeMount = mount
 
@@ -250,9 +268,13 @@ function attachRoot() {
 								this: any,
 								args: any[],
 								original: any,
+								self?: any,
 							) {
-								rootInstance = this
-								return wrapOutput(original.apply(this, args), 'root')
+								// `self` covers patcher variants that pass the instance as an
+								// argument instead of binding it as `this`.
+								const ctx = self ?? this
+								rootInstance = ctx
+								return wrapOutput(original.apply(ctx, args), 'root')
 							} as any),
 						)
 						rootAttached = true
@@ -322,14 +344,10 @@ export function attachOverlay(cleanup: (fn: () => void) => void) {
 	}, 3000)
 	undo.push(() => clearTimeout(timer))
 
-	// AppContainer re-renders rarely, so nudge it to mount the pill without
-	// requiring the "Refresh floating button" row.
-	const nudge1 = setTimeout(forceRootUpdate, 800)
-	const nudge2 = setTimeout(forceRootUpdate, 3500)
-	undo.push(
-		() => clearTimeout(nudge1),
-		() => clearTimeout(nudge2),
-	)
+	// One nudge mounts the pill without a reload. Widgets react to their own
+	// state from here on, so repeated root re-renders are not needed.
+	const nudge = setTimeout(forceRootUpdate, 600)
+	undo.push(() => clearTimeout(nudge))
 
 	cleanup(() => {
 		for (const u of undo.splice(0)) {

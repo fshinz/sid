@@ -1,6 +1,6 @@
 import { getModules } from '@valenced/modules/finders'
 import { withName } from '@valenced/modules/finders/filters'
-import { inspectState, setShowButton } from './inspect'
+import { inspectState, notifyChange } from './inspect'
 
 const CANDIDATES = [
 	'AppContainer',
@@ -25,8 +25,7 @@ const CANDIDATES = [
 export function probeMounts() {
 	const found: string[] = []
 	inspectState.status.probe = 'running…'
-	// setShowButton re-emits the current value; used only to refresh the settings page.
-	setShowButton(inspectState.showButton)
+	notifyChange()
 
 	const unsubs = CANDIDATES.map(name =>
 		getModules(
@@ -40,7 +39,7 @@ export function probeMounts() {
 						: 'other'
 				found.push(`${name} (${kind})`)
 				inspectState.status.probe = `found: ${found.join(', ')}`
-				setShowButton(inspectState.showButton)
+				notifyChange()
 			},
 			{ returnNamespace: true },
 		),
@@ -57,6 +56,6 @@ export function probeMounts() {
 		if (!found.length) {
 			inspectState.status.probe = 'found: none of the candidates'
 		}
-		setShowButton(inspectState.showButton)
+		notifyChange()
 	}, 4000)
 }

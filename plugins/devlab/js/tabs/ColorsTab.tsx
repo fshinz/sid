@@ -61,15 +61,20 @@ function Swatch({ value }: { value?: string }) {
 	)
 }
 
-function matchText(color: StyleColor) {
-	const analysis = analyzeColor(color.value)
-	const names = [analysis.semantic, analysis.raw]
-		.filter(Boolean)
-		.concat(analysis.semanticMatches, analysis.rawMatches)
-	return (
-		tokenLabel(analysis) +
-		(names.length > 1 ? ` (+${names.length - 1} more)` : '')
-	)
+function colorDetails(colors: StyleColor[]) {
+	return colors.map(color => {
+		const analysis = analyzeColor(color.value)
+		const names = [analysis.semantic, analysis.raw]
+			.filter(Boolean)
+			.concat(analysis.semanticMatches, analysis.rawMatches)
+		return {
+			key: color.key,
+			value: analysis.value ?? String(color.value),
+			label:
+				tokenLabel(analysis) +
+				(names.length > 1 ? ` (+${names.length - 1} more)` : ''),
+		}
+	})
 }
 
 function elementReport(element: { chain: string[]; colors: StyleColor[] }) {
@@ -131,7 +136,7 @@ function ReportRow({
 			label={reportSummary(report)}
 			subLabel={
 				expanded
-					? reportToText(report, 'token')
+					? reportToText(report, inspectState.mode)
 					: `${new Date(report.ts).toLocaleTimeString()} · ${report.theme} theme · ${report.layers.length} layer${report.layers.length === 1 ? '' : 's'}`
 			}
 			subLabelLineClamp={expanded ? 30 : 1}
@@ -172,16 +177,15 @@ export function ColorsTab() {
 
 	const handleTokenPress = (entry: TokenEntry) => {
 		setExpandedToken(current => (current === entry.name ? null : entry.name))
-		highlightColor(entry.name, entry.value).then(found => {
-			if (found <= 0) {
-				toast(`No visible elements use ${entry.name}.`)
-			} else {
-				toast(
-					`Highlighting ${entry.name} — ${found} element${found === 1 ? '' : 's'}.`,
-					'success',
-				)
-			}
-		})
+		const found = highlightColor(entry.name, entry.value)
+		if (found <= 0) {
+			toast(`No visible elements use ${entry.name}.`)
+		} else {
+			toast(
+				`Tinting ${entry.name} — ${found} element${found === 1 ? '' : 's'} colored in place.`,
+				'success',
+			)
+		}
 	}
 
 	const handleReportPress = (report: Report) => {
@@ -216,12 +220,11 @@ export function ColorsTab() {
 	const handleHighlightElement = (element: ElementRow) => {
 		const first = element.colors.find(color => color.normalized)
 		if (!first) return
-		highlightElement(element.chain, first.normalized).then(found => {
-			toast(
-				`Highlighting ${element.chain[0] ?? 'element'} — ${found} element${found === 1 ? '' : 's'}.`,
-				found > 0 ? 'success' : undefined,
-			)
-		})
+		const found = highlightElement(element.chain, first.normalized)
+		toast(
+			`Tinting ${element.chain[0] ?? 'element'} — ${found} element${found === 1 ? '' : 's'} colored in place.`,
+			found > 0 ? 'success' : undefined,
+		)
 	}
 
 	const needle = filter.toLowerCase()
@@ -317,7 +320,7 @@ export function ColorsTab() {
 
 			<TableRowGroup
 				title="Theme colors"
-				description="Semantic and raw color tokens with their current values. Tap a token to outline every element using it — the name is what you put in the theme."
+				description="Semantic and raw color tokens with their current values. Tap a token to color every element using it in place — the name is what you put in the theme."
 			>
 				<TableRow
 					label="Current theme"
@@ -347,11 +350,7 @@ export function ColorsTab() {
 				<TableRowGroup title="Highlighting">
 					<TableRow
 						label={highlight.label}
-						subLabel={
-							highlight.scanning
-								? `Scanning… ${highlight.matched} matches so far`
-								: `${highlight.matched} element${highlight.matched === 1 ? '' : 's'} outlined. Navigate around — marks stay until you stop.`
-						}
+						subLabel={`${highlight.matched} element${highlight.matched === 1 ? '' : 's'} tinted in place. Tap Stop to restore their colors.`}
 						trailing={<TableRow.TrailingText text="Stop" />}
 						onPress={stopHighlight}
 					/>
@@ -408,23 +407,21 @@ export function ColorsTab() {
 				<TableRowGroup title={`Elements (${elements.length})`}>
 					{elements.map(element => {
 						const expanded = expandedElement === element.key
+						const details = colorDetails(element.colors)
 						return (
 							<React.Fragment key={element.key}>
 								<TableRow
 									label={element.chain.join(' › ')}
 									subLabel={
 										expanded
-											? element.colors
+											? details
 													.map(
-														color =>
-															`${color.key}: ${analyzeColor(color.value).value ?? String(color.value)}\n  ${matchText(color)}`,
+														detail =>
+															`${detail.key}: ${detail.value}\n  ${detail.label}`,
 													)
 													.join('\n')
-											: element.colors
-													.map(
-														color =>
-															`${color.key}: ${analyzeColor(color.value).value ?? String(color.value)}`,
-													)
+											: details
+													.map(detail => `${detail.key}: ${detail.value}`)
 													.join(' · ')
 									}
 									subLabelLineClamp={expanded ? 20 : 2}
@@ -457,8 +454,8 @@ export function ColorsTab() {
 			)}
 
 			<Text variant="text-sm/normal" color="text-muted">
-				Tip: the DL pill can be dragged anywhere. Tap it for modes, copying, and
-				to hide it.
+				Tip: the DL pill can be dragged anywhere. Tap it for modes, copying,
+				stopping highlights, and to hide it.
 			</Text>
 		</TabScreen>
 	)

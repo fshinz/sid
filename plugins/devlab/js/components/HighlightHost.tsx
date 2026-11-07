@@ -27,55 +27,27 @@ export class DevLabMarker extends React.Component<{
 	}
 }
 
-/** Outlines highlighted elements with rects and shows the stop badge. */
+/** Small status badge with the stop button while elements are tinted. */
 export function HighlightLayer() {
 	const [, rerender] = React.useReducer((count: number) => count + 1, 0)
 	const highlight = getHighlight()
 
 	React.useEffect(() => subscribe(rerender), [])
+	if (!highlight) return null
 
 	return (
-		<View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-			{highlight?.rects.map((rect, index) => (
-				<View
-					key={`${rect.x}-${rect.y}-${index}`}
-					pointerEvents="none"
-					style={[
-						styles.rect,
-						{
-							left: rect.x,
-							top: rect.y,
-							width: rect.width,
-							height: rect.height,
-						},
-					]}
-				/>
-			))}
-
-			{highlight && (
-				<View style={styles.badge} pointerEvents="box-none">
-					<Text style={styles.badgeText} numberOfLines={1}>
-						{highlight.scanning
-							? `Scanning for ${highlight.label}… (${highlight.matched})`
-							: `${highlight.label} — ${highlight.matched} element${highlight.matched === 1 ? '' : 's'}`}
-					</Text>
-					<Pressable style={styles.badgeButton} onPress={stopHighlight}>
-						<Text style={styles.buttonText}>Stop</Text>
-					</Pressable>
-				</View>
-			)}
+		<View style={styles.badge} pointerEvents="box-none">
+			<Text style={styles.badgeText} numberOfLines={1}>
+				{`${highlight.label} — ${highlight.matched} element${highlight.matched === 1 ? '' : 's'} tinted`}
+			</Text>
+			<Pressable style={styles.badgeButton} onPress={stopHighlight}>
+				<Text style={styles.buttonText}>Stop</Text>
+			</Pressable>
 		</View>
 	)
 }
 
 const styles = StyleSheet.create({
-	rect: {
-		position: 'absolute',
-		borderWidth: 2,
-		borderColor: ACCENT,
-		backgroundColor: 'rgba(255, 45, 154, 0.16)',
-		borderRadius: 4,
-	},
 	badge: {
 		position: 'absolute',
 		top: 52,
@@ -89,6 +61,8 @@ const styles = StyleSheet.create({
 		borderWidth: 1,
 		borderColor: ACCENT,
 		padding: 10,
+		zIndex: 9998,
+		elevation: 10,
 	},
 	badgeText: {
 		flex: 1,

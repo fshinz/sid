@@ -1,13 +1,9 @@
 import { findElementsWithColor, markNative, unmarkNative } from './elementscan'
-import type { NativeMark, Rect } from './elementscan'
-
-export type HighlightRect = Rect & { color: string }
+import type { NativeMark } from './elementscan'
 
 export type HighlightState = {
 	label: string
-	rects: HighlightRect[]
 	matched: number
-	scanning: boolean
 } | null
 
 let highlight: HighlightState = null
@@ -50,77 +46,53 @@ export function stopHighlight() {
 	setHighlight(null)
 }
 
+function tint(targets: { fiber: any }[]) {
+	for (const target of targets) {
+		const mark = markNative(target.fiber)
+		if (mark) nativeMarks.push(mark)
+	}
+}
+
 /**
- * Highlights every visible element whose style uses the given normalized
- * color. The value is what theme tokens resolve to, so pass a token's
- * current value to see where it lands in the UI.
+ * Colors every live element that uses the given normalized color, in place.
+ * Pass a token's current value to see where it lands in the UI.
  */
-export async function highlightColor(
+export function highlightColor(
 	label: string,
 	value: string | null | undefined,
-): Promise<number> {
+): number {
 	stopHighlight()
 
 	if (!value) {
-		setHighlight({ label, rects: [], matched: 0, scanning: false })
+		setHighlight({ label, matched: 0 })
 		return 0
 	}
 
-	setHighlight({ label, rects: [], matched: 0, scanning: true })
-
-	const elements = await findElementsWithColor(value, found =>
-		setHighlight({ label, rects: [], matched: found, scanning: true }),
-	)
-
-	for (const element of elements) {
-		const mark = markNative(element.fiber)
-		if (mark) nativeMarks.push(mark)
-	}
-
-	const rects: HighlightRect[] = []
-	for (const element of elements) {
-		if (element.rect) rects.push({ ...element.rect, color: value })
-	}
-
-	setHighlight({ label, rects, matched: elements.length, scanning: false })
+	const elements = findElementsWithColor(value)
+	tint(elements)
+	setHighlight({ label, matched: elements.length })
 	return elements.length
 }
 
-/** Highlights one element by name, preferring the exact chain match. */
-export async function highlightElement(
+/** Colors one element by name, preferring the exact chain match. */
+export function highlightElement(
 	chain: string[],
 	value: string | null | undefined,
-): Promise<number> {
-	if (!value) return 0
+): number {
 	stopHighlight()
-	setHighlight({
-		label: chain[0] ?? 'element',
-		rects: [],
-		matched: 0,
-		scanning: true,
-	})
 
-	const elements = await findElementsWithColor(value)
+	if (!value) {
+		setHighlight({ label: chain[0] ?? 'element', matched: 0 })
+		return 0
+	}
+
+	const elements = findElementsWithColor(value)
 	const match = elements.find(
 		element => element.chain.join('>') === chain.join('>'),
 	)
 	const targets = match ? [match] : elements.slice(0, 1)
 
-	for (const element of targets) {
-		const mark = markNative(element.fiber)
-		if (mark) nativeMarks.push(mark)
-	}
-
-	const rects: HighlightRect[] = []
-	for (const element of targets) {
-		if (element.rect) rects.push({ ...element.rect, color: value })
-	}
-
-	setHighlight({
-		label: chain[0] ?? 'element',
-		rects,
-		matched: targets.length,
-		scanning: false,
-	})
+	tint(targets)
+	setHighlight({ label: chain[0] ?? 'element', matched: targets.length })
 	return targets.length
 }

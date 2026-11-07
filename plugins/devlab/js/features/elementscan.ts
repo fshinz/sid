@@ -2,13 +2,6 @@ import { ReactNative } from '@valenced/react'
 import { safely } from './sanitize'
 import { normalizeColor } from './tokens'
 
-export type Rect = {
-	x: number
-	y: number
-	width: number
-	height: number
-}
-
 export type StyleColor = {
 	key: string
 	/** Normalized lowercase `#rrggbb` or `#rrggbbaa`, or null. */
@@ -38,9 +31,6 @@ const STYLE_COLOR_KEYS = [
 	'textDecorationColor',
 	'overlayColor',
 ]
-
-const MEASURE_TIMEOUT = 1000
-const MEASURE_CHUNK = 150
 
 // Subtrees that belong to DevLab's own UI are skipped while scanning.
 const skipRoots = new Set<Fiber>()
@@ -177,69 +167,18 @@ export function styleColors(fiber: Fiber): StyleColor[] {
 	return out
 }
 
-export function measureFiber(fiber: Fiber): Promise<Rect | null> {
-	return new Promise(resolve => {
-		let done = false
-		const finish = (rect: Rect | null) => {
-			if (done) return
-			done = true
-			resolve(rect)
-		}
-		const timer = setTimeout(() => finish(null), MEASURE_TIMEOUT)
-
-		const callback = (x: number, y: number, width: number, height: number) => {
-			clearTimeout(timer)
-			finish({ x, y, width, height })
-		}
-
-		try {
-			const instance = fiber?.stateNode
-			if (instance && typeof instance.measureInWindow === 'function') {
-				instance.measureInWindow(callback)
-				return
-			}
-
-			const handle = instance ? ReactNative.findNodeHandle(instance) : null
-			if (
-				handle &&
-				typeof ReactNative.UIManager?.measureInWindow === 'function'
-			) {
-				ReactNative.UIManager.measureInWindow(handle, callback)
-				return
-			}
-		} catch {
-			// Fall through to the timeout.
-		}
-		clearTimeout(timer)
-		finish(null)
-	})
-}
-
-/** Visible elements using the given normalized color, with their rects. */
-export async function findElementsWithColor(
+/** Live elements whose style uses the given normalized color. */
+export function findElementsWithColor(
 	normalized: string,
-	onProgress?: (found: number) => void,
-): Promise<{ fiber: Fiber; chain: string[]; rect: Rect | null }[]> {
-	const matches: Fiber[] = []
+	limit = 120,
+): { fiber: Fiber; chain: string[] }[] {
+	const out: { fiber: Fiber; chain: string[] }[] = []
 	for (const fiber of walkHostFibers()) {
 		const colors = styleColors(fiber)
 		if (colors.some(color => color.normalized === normalized)) {
-			matches.push(fiber)
+			out.push({ fiber, chain: componentChain(fiber) })
+			if (out.length >= limit) break
 		}
-	}
-
-	const out: { fiber: Fiber; chain: string[]; rect: Rect | null }[] = []
-	for (let start = 0; start < matches.length; start += MEASURE_CHUNK) {
-		const chunk = matches.slice(start, start + MEASURE_CHUNK)
-		const rects = await Promise.all(chunk.map(measureFiber))
-		for (let i = 0; i < chunk.length; i++) {
-			out.push({
-				fiber: chunk[i],
-				chain: componentChain(chunk[i]),
-				rect: rects[i],
-			})
-		}
-		onProgress?.(out.length)
 	}
 	return out
 }
@@ -262,13 +201,19 @@ export function scanColoredElements(limit = 200): {
 
 export type NativeMark = {
 	instance: any
+	backgroundColor?: any
 	borderWidth?: any
 	borderColor?: any
 	borderStyle?: any
-	opacity?: any
 }
 
-/** Draws a border around the element itself, visible on any screen. */
+const TINT_COLOR = '#FF2D9A'
+const TINT_FILL = '#FF2D9A66'
+
+/**
+ * Colors the element itself (translucent fill + border) so it is obvious
+ * which element it is. The original styles are saved on the mark.
+ */
 export function markNative(fiber: Fiber): NativeMark | null {
 	const instance = fiber?.stateNode
 	if (!instance || typeof instance.setNativeProps !== 'function') return null
@@ -283,16 +228,17 @@ export function markNative(fiber: Fiber): NativeMark | null {
 
 		const mark: NativeMark = {
 			instance,
+			backgroundColor: flat.backgroundColor,
 			borderWidth: flat.borderWidth,
 			borderColor: flat.borderColor,
 			borderStyle: flat.borderStyle,
-			opacity: flat.opacity,
 		}
 
 		instance.setNativeProps({
 			style: {
+				backgroundColor: TINT_FILL,
 				borderWidth: 2,
-				borderColor: '#FF2D9A',
+				borderColor: TINT_COLOR,
 				borderStyle: 'solid',
 			},
 		})
@@ -307,10 +253,10 @@ export function unmarkNative(marks: NativeMark[]) {
 		safely(() =>
 			mark.instance?.setNativeProps?.({
 				style: {
+					backgroundColor: mark.backgroundColor ?? 'transparent',
 					borderWidth: mark.borderWidth ?? 0,
 					borderColor: mark.borderColor ?? 'transparent',
 					borderStyle: mark.borderStyle ?? 'solid',
-					opacity: mark.opacity ?? 1,
 				},
 			}),
 		)
