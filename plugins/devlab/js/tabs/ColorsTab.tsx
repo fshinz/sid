@@ -5,9 +5,14 @@ import { React, ReactNative } from '@valenced/react'
 import { forceRootUpdate } from '../components/FloatingPill'
 import { SearchField } from '../components/SearchField'
 import { TabScreen } from '../components/TabScreen'
+import {
+	getLastPickedRgb,
+	openDiscordColorPicker,
+	rgbIntToHex,
+} from '../features/colorpicker'
 import { hasFiberRoot, scanColoredElements } from '../features/elementscan'
 import {
-	getHighlight,
+	getHighlights,
 	highlightColor,
 	highlightElement,
 	stopHighlight,
@@ -111,12 +116,12 @@ function TokenRow({
 							others.length > 0
 								? `Same value: ${others.slice(0, 6).join(', ')}${others.length > 6 ? ` +${others.length - 6}` : ''}`
 								: 'Unique value.',
-							'Tap Highlight to outline every element using this color.',
+							'Tap Tint to color every element using this color, in a color you pick.',
 						].join('\n')
-					: `${entry.value} · tap to highlight`
+					: `${entry.value} · tap to tint`
 			}
 			subLabelLineClamp={expanded ? 6 : 1}
-			trailing={expanded ? <TableRow.TrailingText text="Highlight" /> : null}
+			trailing={expanded ? <TableRow.TrailingText text="Tint" /> : null}
 			onPress={onPress}
 		/>
 	)
@@ -161,7 +166,7 @@ export function ColorsTab() {
 
 	React.useEffect(() => subscribe(rerender), [])
 
-	const highlight = getHighlight()
+	const highlights = getHighlights()
 	const status = Object.entries(inspectState.status)
 		.filter(([, v]) => v)
 		.map(([k, v]) => `${k}: ${v}`)
@@ -177,15 +182,20 @@ export function ColorsTab() {
 
 	const handleTokenPress = (entry: TokenEntry) => {
 		setExpandedToken(current => (current === entry.name ? null : entry.name))
-		const found = highlightColor(entry.name, entry.value)
-		if (found <= 0) {
-			toast(`No visible elements use ${entry.name}.`)
-		} else {
-			toast(
-				`Tinting ${entry.name} — ${found} element${found === 1 ? '' : 's'} colored in place.`,
-				'success',
-			)
-		}
+		openDiscordColorPicker({
+			color: rgbIntToHex(getLastPickedRgb()),
+			onSelect: hex => {
+				const found = highlightColor(entry.name, entry.name, entry.value, hex)
+				if (found <= 0) {
+					toast(`No visible elements use ${entry.name}.`)
+				} else {
+					toast(
+						`Tinting ${entry.name} in ${hex} — ${found} element${found === 1 ? '' : 's'} colored in place.`,
+						'success',
+					)
+				}
+			},
+		})
 	}
 
 	const handleReportPress = (report: Report) => {
@@ -220,11 +230,17 @@ export function ColorsTab() {
 	const handleHighlightElement = (element: ElementRow) => {
 		const first = element.colors.find(color => color.normalized)
 		if (!first) return
-		const found = highlightElement(element.chain, first.normalized)
-		toast(
-			`Tinting ${element.chain[0] ?? 'element'} — ${found} element${found === 1 ? '' : 's'} colored in place.`,
-			found > 0 ? 'success' : undefined,
-		)
+		const id = element.chain[0] ?? 'element'
+		openDiscordColorPicker({
+			color: rgbIntToHex(getLastPickedRgb()),
+			onSelect: hex => {
+				const found = highlightElement(element.chain, first.normalized, hex)
+				toast(
+					`Tinting ${id} in ${hex} — ${found} element${found === 1 ? '' : 's'} colored in place.`,
+					found > 0 ? 'success' : undefined,
+				)
+			},
+		})
 	}
 
 	const needle = filter.toLowerCase()
@@ -320,7 +336,7 @@ export function ColorsTab() {
 
 			<TableRowGroup
 				title="Theme colors"
-				description="Semantic and raw color tokens with their current values. Tap a token to color every element using it in place — the name is what you put in the theme."
+				description="Semantic and raw color tokens with their current values. Tap a token, pick a color in Discord's color chooser, and every element using that token is tinted your color — so CARD_MUTED_PRESSED_BG vs BACKGROUND_SURFACE_HIGHEST are instantly tellable apart."
 			>
 				<TableRow
 					label="Current theme"
@@ -346,13 +362,24 @@ export function ColorsTab() {
 				)}
 			</TableRowGroup>
 
-			{highlight && (
-				<TableRowGroup title="Highlighting">
+			{highlights.length > 0 && (
+				<TableRowGroup title={`Active highlights (${highlights.length})`}>
+					{highlights.map(item => (
+						<TableRow
+							key={item.id}
+							icon={<Swatch value={item.color} />}
+							label={item.label}
+							subLabel={`${item.color} · ${item.matched} element${item.matched === 1 ? '' : 's'} tinted in place. Tap to remove.`}
+							subLabelLineClamp={1}
+							trailing={<TableRow.TrailingText text="Remove" />}
+							onPress={() => stopHighlight(item.id)}
+						/>
+					))}
 					<TableRow
-						label={highlight.label}
-						subLabel={`${highlight.matched} element${highlight.matched === 1 ? '' : 's'} tinted in place. Tap Stop to restore their colors.`}
-						trailing={<TableRow.TrailingText text="Stop" />}
-						onPress={stopHighlight}
+						label="Stop all highlights"
+						subLabel="Restores every tinted element to its original colors."
+						trailing={<TableRow.TrailingText text="Restore" />}
+						onPress={() => stopHighlight()}
 					/>
 				</TableRowGroup>
 			)}
@@ -426,7 +453,7 @@ export function ColorsTab() {
 									}
 									subLabelLineClamp={expanded ? 20 : 2}
 									trailing={
-										expanded ? <TableRow.TrailingText text="Highlight" /> : null
+										expanded ? <TableRow.TrailingText text="Tint" /> : null
 									}
 									onPress={() => {
 										if (!expanded) {
@@ -455,7 +482,8 @@ export function ColorsTab() {
 
 			<Text variant="text-sm/normal" color="text-muted">
 				Tip: the DL pill can be dragged anywhere. Tap it for modes, copying,
-				stopping highlights, and to hide it.
+				stopping highlights, and to hide it. Highlight colors come from
+				Discord's own color chooser — tint each token its own color to compare.
 			</Text>
 		</TabScreen>
 	)

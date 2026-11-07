@@ -2,6 +2,11 @@ import * as settings from '@valenced/discord/modules/settings'
 import { lookupGeneratedIconComponent } from '@valenced/utils/discord'
 import { setPluginApi } from './api'
 import { attachOverlay } from './components/FloatingPill'
+import {
+	recordPluginError,
+	restoreEntries,
+	startErrorLog,
+} from './features/errlog'
 import { startFluxLog, stopFluxLog } from './features/fluxlog'
 import {
 	applyInspectPrefs,
@@ -11,12 +16,7 @@ import {
 } from './features/inspect'
 import { findTokens } from './features/tokens'
 import { DevLabSettings } from './settings'
-import {
-	bindStorage,
-	readStateWhenLoaded,
-	recordError,
-	saveInspectPrefs,
-} from './storage'
+import { bindStorage, readStateWhenLoaded, saveInspectPrefs } from './storage'
 import { TOOLS } from './tools'
 import type { DevLabState } from './storage'
 
@@ -37,7 +37,7 @@ for (const { route, title, Screen } of TOOLS) {
 	}
 }
 
-const initialState: DevLabState = { entries: [], enabled: true }
+const initialState: DevLabState = { enabled: true }
 
 // addSettingsItemToSection throws while the section doesn't exist yet.
 function sectionExists() {
@@ -61,24 +61,15 @@ export default plugin<{ jsonStorage: DevLabState }>({
 		bindStorage(jsonStorage)
 		setPluginApi(self)
 
-		const report = (error: unknown, context: string) => {
-			recordError(error, context).catch(() => {})
-		}
+		// Live error log: console, Discord's logger, and uncaught errors.
+		cleanup(startErrorLog())
 
-		// Errors other plugins report through the plugin API end up in the Errors tab.
-		self.reportError = error => report(error, 'Reported plugin error')
+		// Errors other plugins report through the plugin API end up in the log too.
+		self.reportError = error =>
+			recordPluginError(error, 'Reported plugin error')
 
-		const errorUtils = (globalThis as any).ErrorUtils
-		const previousHandler = errorUtils?.getGlobalHandler?.()
-
-		errorUtils?.setGlobalHandler?.((error: Error, isFatal: boolean) => {
-			report(error, isFatal ? 'Fatal error' : 'Unhandled error')
-			previousHandler?.(error, isFatal)
-		})
-
-		cleanup(() => {
-			if (previousHandler) errorUtils?.setGlobalHandler?.(previousHandler)
-		})
+		// Restore persisted entries once storage finishes loading.
+		void readStateWhenLoaded().then(state => restoreEntries(state.logs ?? []))
 
 		// Flux dispatches are tracked from startup so the log is complete.
 		startFluxLog()

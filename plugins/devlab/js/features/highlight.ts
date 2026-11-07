@@ -1,13 +1,17 @@
 import { findElementsWithColor, markNative, unmarkNative } from './elementscan'
 import type { NativeMark } from './elementscan'
 
-export type HighlightState = {
+export type ActiveHighlight = {
+	/** Token name or element chain head — one highlight per id. */
+	id: string
 	label: string
+	/** Tint color, `#RRGGBB`. */
+	color: string
 	matched: number
-} | null
+	marks: NativeMark[]
+}
 
-let highlight: HighlightState = null
-let nativeMarks: NativeMark[] = []
+let active: ActiveHighlight[] = []
 const listeners = new Set<() => void>()
 
 function notify() {
@@ -27,50 +31,59 @@ export function subscribe(listener: () => void) {
 	}
 }
 
-export function getHighlight(): HighlightState {
-	return highlight
+export function getHighlights(): readonly ActiveHighlight[] {
+	return active
 }
 
-function setHighlight(state: HighlightState) {
-	highlight = state
+function tint(targets: { fiber: any }[], color: string) {
+	const marks: NativeMark[] = []
+	for (const target of targets) {
+		const mark = markNative(target.fiber, color)
+		if (mark) marks.push(mark)
+	}
+	return marks
+}
+
+/** Removes one highlight by id (or all of them) and restores the elements. */
+export function stopHighlight(id?: string) {
+	const keep: ActiveHighlight[] = []
+	for (const item of active) {
+		if (id === undefined || item.id === id) unmarkNative(item.marks)
+		else keep.push(item)
+	}
+	active = keep
 	notify()
 }
 
-function restoreNativeMarks() {
-	unmarkNative(nativeMarks)
-	nativeMarks = []
-}
-
-export function stopHighlight() {
-	restoreNativeMarks()
-	setHighlight(null)
-}
-
-function tint(targets: { fiber: any }[]) {
-	for (const target of targets) {
-		const mark = markNative(target.fiber)
-		if (mark) nativeMarks.push(mark)
-	}
-}
-
 /**
- * Colors every live element that uses the given normalized color, in place.
- * Pass a token's current value to see where it lands in the UI.
+ * Colors every live element that uses the given normalized color, in the
+ * chosen tint color. One highlight per id — picking again replaces it.
  */
 export function highlightColor(
+	id: string,
 	label: string,
 	value: string | null | undefined,
+	color: string,
 ): number {
-	stopHighlight()
+	stopHighlight(id)
 
 	if (!value) {
-		setHighlight({ label, matched: 0 })
+		notify()
 		return 0
 	}
 
 	const elements = findElementsWithColor(value)
-	tint(elements)
-	setHighlight({ label, matched: elements.length })
+	active = [
+		...active,
+		{
+			id,
+			label,
+			color,
+			matched: elements.length,
+			marks: tint(elements, color),
+		},
+	]
+	notify()
 	return elements.length
 }
 
@@ -78,11 +91,13 @@ export function highlightColor(
 export function highlightElement(
 	chain: string[],
 	value: string | null | undefined,
+	color: string,
 ): number {
-	stopHighlight()
+	const id = chain[0] ?? 'element'
+	stopHighlight(id)
 
 	if (!value) {
-		setHighlight({ label: chain[0] ?? 'element', matched: 0 })
+		notify()
 		return 0
 	}
 
@@ -92,7 +107,16 @@ export function highlightElement(
 	)
 	const targets = match ? [match] : elements.slice(0, 1)
 
-	tint(targets)
-	setHighlight({ label: chain[0] ?? 'element', matched: targets.length })
+	active = [
+		...active,
+		{
+			id,
+			label: id,
+			color,
+			matched: targets.length,
+			marks: tint(targets, color),
+		},
+	]
+	notify()
 	return targets.length
 }

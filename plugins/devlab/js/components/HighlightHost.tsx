@@ -1,6 +1,6 @@
 import { React, ReactNative } from '@valenced/react'
 import { registerSkipRootOf, unregisterSkipRoot } from '../features/elementscan'
-import { getHighlight, stopHighlight, subscribe } from '../features/highlight'
+import { getHighlights, stopHighlight, subscribe } from '../features/highlight'
 
 const { Pressable, StyleSheet, Text, View } = ReactNative
 
@@ -30,17 +30,20 @@ export class DevLabMarker extends React.Component<{
 /** Small status badge with the stop button while elements are tinted. */
 export function HighlightLayer() {
 	const [, rerender] = React.useReducer((count: number) => count + 1, 0)
-	const highlight = getHighlight()
+	const highlights = getHighlights()
 
 	React.useEffect(() => subscribe(rerender), [])
-	if (!highlight) return null
+	if (!highlights.length) return null
+
+	const total = highlights.reduce((sum, item) => sum + item.matched, 0)
+	const labels = highlights.map(item => item.label).join(' · ')
 
 	return (
 		<View style={styles.badge} pointerEvents="box-none">
 			<Text style={styles.badgeText} numberOfLines={1}>
-				{`${highlight.label} — ${highlight.matched} element${highlight.matched === 1 ? '' : 's'} tinted`}
+				{`${labels} — ${total} element${total === 1 ? '' : 's'} tinted`}
 			</Text>
-			<Pressable style={styles.badgeButton} onPress={stopHighlight}>
+			<Pressable style={styles.badgeButton} onPress={() => stopHighlight()}>
 				<Text style={styles.buttonText}>Stop</Text>
 			</Pressable>
 		</View>

@@ -1,39 +1,33 @@
 import type { JsonStorage } from '@valenced/json-storage'
+import type { LogEntry } from './features/errlog'
 import type { InspectPrefs } from './features/inspect'
 
-export type DiagnosticEntry = {
-	id: string
-	title: string
-	message: string
-	stack?: string
-	context?: string
-	timestamp: number
-	level: 'error' | 'warning' | 'info'
-}
-
 export type DevLabState = {
-	entries: DiagnosticEntry[]
 	enabled: boolean
 	inspect?: InspectPrefs
+	logs?: LogEntry[]
 }
 
 let storage: JsonStorage<DevLabState> | undefined
 let writeQueue: Promise<unknown> = Promise.resolve()
 
-const MAX_ENTRIES = 100
+const MAX_LOGS = 300
 
 export function bindStorage(next: JsonStorage<DevLabState>) {
 	storage = next
 }
 
-function isEntry(value: unknown): value is DiagnosticEntry {
+const LEVELS = new Set(['debug', 'log', 'info', 'warn', 'error', 'fatal'])
+const SOURCES = new Set(['console', 'discord', 'uncaught'])
+
+function isLogEntry(value: unknown): value is LogEntry {
 	if (!value || typeof value !== 'object') return false
-	const entry = value as Partial<DiagnosticEntry>
+	const entry = value as Partial<LogEntry>
 	return (
-		typeof entry.id === 'string' &&
-		typeof entry.title === 'string' &&
-		typeof entry.message === 'string' &&
-		typeof entry.timestamp === 'number'
+		typeof entry.t === 'number' &&
+		typeof entry.msg === 'string' &&
+		LEVELS.has(entry.lvl as string) &&
+		SOURCES.has(entry.src as string)
 	)
 }
 
@@ -49,14 +43,14 @@ function normalizeInspect(value: unknown): InspectPrefs | undefined {
 }
 
 function normalizeState(value: unknown): DevLabState {
-	if (!value || typeof value !== 'object') return { entries: [], enabled: true }
+	if (!value || typeof value !== 'object') return { enabled: true }
 	const raw = value as Partial<DevLabState>
 	return {
-		entries: Array.isArray(raw.entries)
-			? raw.entries.filter(isEntry).slice(0, MAX_ENTRIES)
-			: [],
 		enabled: raw.enabled !== false,
 		inspect: normalizeInspect(raw.inspect),
+		logs: Array.isArray(raw.logs)
+			? raw.logs.filter(isLogEntry).slice(-MAX_LOGS)
+			: undefined,
 	}
 }
 
@@ -103,25 +97,7 @@ export function saveInspectPrefs(prefs: InspectPrefs) {
 	return saveState({ ...current, inspect: prefs })
 }
 
-export async function recordError(error: unknown, context = 'DevLab') {
+export function saveLogs(logs: LogEntry[]) {
 	const current = readCachedState()
-	const actualError = error instanceof Error ? error : new Error(String(error))
-	const entry: DiagnosticEntry = {
-		id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-		title: context,
-		message: actualError.message,
-		stack: actualError.stack,
-		context,
-		timestamp: Date.now(),
-		level: 'error',
-	}
-	await saveState({
-		...current,
-		entries: [entry, ...current.entries].slice(0, MAX_ENTRIES),
-	})
-}
-
-export async function clearErrors() {
-	const current = readCachedState()
-	await saveState({ ...current, entries: [] })
+	return saveState({ ...current, logs: logs.slice(-MAX_LOGS) })
 }

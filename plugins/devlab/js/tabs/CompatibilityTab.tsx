@@ -2,7 +2,7 @@ import { Design } from '@valenced/discord/design'
 import { React } from '@valenced/react'
 import { TabScreen } from '../components/TabScreen'
 import { checkAllPlugins } from '../features/compatibility'
-import { recordError } from '../storage'
+import { recordPluginError } from '../features/errlog'
 import type { CompatibilityReport } from '../features/compatibility'
 
 const { Button, TableRow, TableRowGroup } = Design
@@ -33,7 +33,7 @@ export function CompatibilityTab() {
 			setReports(await checkAllPlugins())
 		} catch (error) {
 			setReports([])
-			recordError(error, 'Compatibility check failed')
+			recordPluginError(error, 'Compatibility check failed')
 		} finally {
 			setChecking(false)
 			setDone(true)
