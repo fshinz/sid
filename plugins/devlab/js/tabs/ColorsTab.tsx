@@ -2,31 +2,42 @@ import { ToastActionCreators } from '@valenced/discord/actions'
 import { Design } from '@valenced/discord/design'
 import { Clipboard } from '@valenced/externals/react-native-clipboard'
 import { React, ReactNative } from '@valenced/react'
+import { forceRootUpdate } from '../components/FloatingPill'
 import { SearchField } from '../components/SearchField'
 import { TabScreen } from '../components/TabScreen'
-import {
-	displayColor,
-	getCatalog,
-	refreshCatalog,
-	tokensForColor,
-} from '../features/colors'
 import { hasFiberRoot, scanColoredElements } from '../features/elementscan'
 import {
-	cancelPick,
 	getHighlight,
-	getPick,
+	highlightColor,
 	highlightElement,
-	highlightToken,
-	setPickMinimized,
-	startPick,
 	stopHighlight,
-	subscribe,
 } from '../features/highlight'
-import type { ColorToken } from '../features/colors'
+import {
+	clearHistory,
+	inspectState,
+	reportSummary,
+	reportToText,
+	setCopyOnTap,
+	setInspecting,
+	setShowButton,
+	startMode,
+	subscribe,
+} from '../features/inspect'
+import { probeMounts } from '../features/probe'
+import {
+	analyzeColor,
+	currentTheme,
+	rawEntries,
+	semanticEntries,
+	tokenLabel,
+	tokensAvailable,
+	tokensForValue,
+} from '../features/tokens'
 import type { ElementInfo, StyleColor } from '../features/elementscan'
-import type { PickResult } from '../features/highlight'
+import type { Report } from '../features/inspect'
+import type { TokenEntry } from '../features/tokens'
 
-const { Button, Stack, TableRow, TableRowGroup, Text } = Design
+const { Button, TableRow, TableRowGroup, TableSwitchRow, Text } = Design
 const { View } = ReactNative
 
 const MAX_TOKEN_ROWS = 150
@@ -35,7 +46,7 @@ const TOAST_KEY = 'shin.devlab.colors'
 
 type ElementRow = ElementInfo & { key: string }
 
-function Swatch({ canonical }: { canonical: string | null }) {
+function Swatch({ value }: { value?: string }) {
 	return (
 		<View
 			style={{
@@ -44,85 +55,88 @@ function Swatch({ canonical }: { canonical: string | null }) {
 				borderRadius: 6,
 				borderWidth: 1,
 				borderColor: '#00000040',
-				backgroundColor: canonical ?? 'transparent',
+				backgroundColor: value ?? 'transparent',
 			}}
 		/>
 	)
 }
 
 function matchText(color: StyleColor) {
-	const { semantic, raw } = tokensForColor(color.canonical)
-	const names = [...semantic, ...raw].map(token => token.name)
-	const line =
-		names.length > 0 ? names.slice(0, 3).join(', ') : 'no token match'
-	return `${line}${names.length > 3 ? ` +${names.length - 3}` : ''}`
+	const analysis = analyzeColor(color.value)
+	const names = [analysis.semantic, analysis.raw]
+		.filter(Boolean)
+		.concat(analysis.semanticMatches, analysis.rawMatches)
+	return (
+		tokenLabel(analysis) +
+		(names.length > 1 ? ` (+${names.length - 1} more)` : '')
+	)
 }
 
 function elementReport(element: { chain: string[]; colors: StyleColor[] }) {
 	return `Element: ${element.chain.join(' > ')}\n\n${element.colors
 		.map(color => {
-			const { semantic, raw } = tokensForColor(color.canonical)
-			return `${color.key}: ${displayColor(color.canonical)}\n  semantic: ${semantic.map(token => token.name).join(', ') || '—'}\n  raw: ${raw.map(token => token.name).join(', ') || '—'}`
+			const a = analyzeColor(color.value)
+			return `${color.key}: ${a.value ?? String(color.value)}\n  semantic: ${[a.semantic, ...a.semanticMatches].filter(Boolean).join(', ') || '—'}\n  raw: ${[a.raw, ...a.rawMatches].filter(Boolean).join(', ') || '—'}`
 		})
 		.join('\n')}`
 }
 
 function TokenRow({
-	token,
+	entry,
 	expanded,
 	onPress,
-	onHighlight,
 }: {
-	token: ColorToken
+	entry: TokenEntry
 	expanded: boolean
 	onPress: () => void
-	onHighlight: () => void
 }) {
+	const matches = tokensForValue(entry.value)
+	const others = [...matches.semantic, ...matches.raw].filter(
+		name => name !== entry.name,
+	)
+
 	return (
 		<TableRow
-			icon={<Swatch canonical={token.canonical} />}
-			label={token.name}
+			icon={<Swatch value={entry.value} />}
+			label={entry.name}
 			subLabel={
 				expanded
 					? [
-							`Value: ${displayColor(token.canonical)}`,
-							`Source: ${token.path}`,
+							`Value: ${entry.value}`,
+							others.length > 0
+								? `Same value: ${others.slice(0, 6).join(', ')}${others.length > 6 ? ` +${others.length - 6}` : ''}`
+								: 'Unique value.',
 							'Tap Highlight to outline every element using this color.',
 						].join('\n')
-					: `${displayColor(token.canonical)} · tap to highlight`
+					: `${entry.value} · tap to highlight`
 			}
 			subLabelLineClamp={expanded ? 6 : 1}
 			trailing={expanded ? <TableRow.TrailingText text="Highlight" /> : null}
-			onPress={() => {
-				onPress()
-				onHighlight()
-			}}
+			onPress={onPress}
 		/>
 	)
 }
 
-function PickedReport({ result }: { result: PickResult }) {
+function ReportRow({
+	report,
+	expanded,
+	onPress,
+}: {
+	report: Report
+	expanded: boolean
+	onPress: () => void
+}) {
 	return (
 		<TableRow
-			label={result.chain.join(' › ')}
-			subLabel={result.matches
-				.map(
-					match =>
-						`${match.color.key}: ${displayColor(match.color.canonical)}\n  semantic: ${match.semantic.map(token => token.name).join(', ') || '—'}\n  raw: ${match.raw.map(token => token.name).join(', ') || '—'}`,
-				)
-				.join('\n')}
-			subLabelLineClamp={24}
-			trailing={<TableRow.TrailingText text="Copy" />}
-			onPress={() =>
-				Clipboard.setString(
-					`Element: ${result.chain.join(' > ')}\n\n${result.matches
-						.map(
-							match =>
-								`${match.color.key}: ${displayColor(match.color.canonical)}\n  semantic: ${match.semantic.map(token => token.name).join(', ') || '—'}\n  raw: ${match.raw.map(token => token.name).join(', ') || '—'}`,
-						)
-						.join('\n')}`,
-				)
+			label={reportSummary(report)}
+			subLabel={
+				expanded
+					? reportToText(report, 'token')
+					: `${new Date(report.ts).toLocaleTimeString()} · ${report.theme} theme · ${report.layers.length} layer${report.layers.length === 1 ? '' : 's'}`
 			}
+			subLabelLineClamp={expanded ? 30 : 1}
+			trailing={<TableRow.TrailingText text={expanded ? 'Copy' : 'Details'} />}
+			onPress={onPress}
 		/>
 	)
 }
@@ -130,8 +144,10 @@ function PickedReport({ result }: { result: PickResult }) {
 export function ColorsTab() {
 	const [, rerender] = React.useReducer((count: number) => count + 1, 0)
 	const [filter, setFilter] = React.useState('')
-	const [cataloged, setCataloged] = React.useState(() => getCatalog())
 	const [expandedToken, setExpandedToken] = React.useState<string | null>(null)
+	const [expandedReport, setExpandedReport] = React.useState<number | null>(
+		null,
+	)
 	const [expandedElement, setExpandedElement] = React.useState<string | null>(
 		null,
 	)
@@ -141,34 +157,47 @@ export function ColorsTab() {
 	React.useEffect(() => subscribe(rerender), [])
 
 	const highlight = getHighlight()
-	const pick = getPick()
+	const status = Object.entries(inspectState.status)
+		.filter(([, v]) => v)
+		.map(([k, v]) => `${k}: ${v}`)
+		.join('\n')
 
-	const handleRefresh = () => {
-		setCataloged(refreshCatalog())
-		setExpandedToken(null)
+	const toast = (text: string, variant?: 'success' | 'critical') => {
+		try {
+			ToastActionCreators.open(TOAST_KEY, { text, variant })
+		} catch {
+			// Ignore.
+		}
 	}
 
-	const handleTokenPress = (token: ColorToken) => {
-		highlightToken(token).then(found => {
-			if (found === 0) {
-				ToastActionCreators.open(TOAST_KEY, {
-					text: `No visible elements use ${token.name}.`,
-				})
-			} else if (found > 0) {
-				ToastActionCreators.open(TOAST_KEY, {
-					text: `Highlighting ${token.name} — ${found} element${found === 1 ? '' : 's'}.`,
-					variant: 'success',
-				})
+	const handleTokenPress = (entry: TokenEntry) => {
+		setExpandedToken(current => (current === entry.name ? null : entry.name))
+		highlightColor(entry.name, entry.value).then(found => {
+			if (found <= 0) {
+				toast(`No visible elements use ${entry.name}.`)
+			} else {
+				toast(
+					`Highlighting ${entry.name} — ${found} element${found === 1 ? '' : 's'}.`,
+					'success',
+				)
 			}
 		})
 	}
 
+	const handleReportPress = (report: Report) => {
+		if (expandedReport !== report.id) return setExpandedReport(report.id)
+		Clipboard.setString(reportToText(report, 'token'))
+		setExpandedReport(null)
+	}
+
+	const handleRefreshPill = () => {
+		forceRootUpdate()
+		toast('Refreshing the floating button…')
+	}
+
 	const handleScanElements = () => {
 		if (!hasFiberRoot()) {
-			ToastActionCreators.open(TOAST_KEY, {
-				text: 'UI tree unavailable. Reload the plugin and try again.',
-				variant: 'critical',
-			})
+			toast('UI tree unavailable. Reload the plugin and try again.', 'critical')
 			return
 		}
 
@@ -176,7 +205,7 @@ export function ColorsTab() {
 		try {
 			const found = scanColoredElements(MAX_ELEMENT_ROWS).map(element => ({
 				...element,
-				key: `${element.chain.join('>')}#${element.fiber?.index ?? Math.random().toString(36).slice(2, 7)}`,
+				key: `${element.chain.join('>')}#${Math.random().toString(36).slice(2, 7)}`,
 			}))
 			setElements(found)
 		} finally {
@@ -185,101 +214,134 @@ export function ColorsTab() {
 	}
 
 	const handleHighlightElement = (element: ElementRow) => {
-		const canonical = element.colors.find(color => color.canonical)?.canonical
-		if (!canonical) return
-		highlightElement(element.chain, canonical).then(found => {
-			ToastActionCreators.open(TOAST_KEY, {
-				text: `Highlighting ${element.chain[0] ?? 'element'} — ${found} element${found === 1 ? '' : 's'}.`,
-				variant: found > 0 ? 'success' : 'default',
-			})
+		const first = element.colors.find(color => color.normalized)
+		if (!first) return
+		highlightElement(element.chain, first.normalized).then(found => {
+			toast(
+				`Highlighting ${element.chain[0] ?? 'element'} — ${found} element${found === 1 ? '' : 's'}.`,
+				found > 0 ? 'success' : undefined,
+			)
 		})
 	}
 
-	const handleCopyElement = (element: ElementRow) => {
-		Clipboard.setString(elementReport(element))
-	}
-
 	const needle = filter.toLowerCase()
-	const semantic = cataloged.semantic.filter(
-		token => needle === '' || token.name.toLowerCase().includes(needle),
+	const semantic = semanticEntries().filter(
+		entry => needle === '' || entry.name.toLowerCase().includes(needle),
 	)
-	const raw = cataloged.raw.filter(
-		token => needle === '' || token.name.toLowerCase().includes(needle),
+	const raw = rawEntries().filter(
+		entry => needle === '' || entry.name.toLowerCase().includes(needle),
 	)
 
-	const renderToken = (token: ColorToken) => (
+	const renderToken = (entry: TokenEntry, kind: string) => (
 		<TokenRow
-			key={`${token.kind}:${token.name}`}
-			token={token}
-			expanded={expandedToken === token.path}
-			onPress={() =>
-				setExpandedToken(current =>
-					current === token.path ? null : token.path,
-				)
-			}
-			onHighlight={() => handleTokenPress(token)}
+			key={`${kind}:${entry.name}`}
+			entry={entry}
+			expanded={expandedToken === entry.name}
+			onPress={() => handleTokenPress(entry)}
 		/>
 	)
 
 	return (
 		<TabScreen>
 			<TableRowGroup
+				title="Element inspector"
+				description="Turn on logging, then tap any element in the app to record its semantic and raw colors. The floating pill works from any screen."
+			>
+				<TableSwitchRow
+					label="Inspect mode"
+					subLabel="Tap any element to log its colors. Elements rendered after turning this on are inspectable, so open a screen or switch channels afterwards."
+					value={inspectState.enabled}
+					onValueChange={setInspecting}
+				/>
+				<TableSwitchRow
+					label="Copy report on tap"
+					subLabel="Copies the report to the clipboard whenever you log an element."
+					value={inspectState.copyOnTap}
+					onValueChange={setCopyOnTap}
+				/>
+				<TableSwitchRow
+					label="Floating button"
+					subLabel="Show the draggable DL pill for quick access from any screen."
+					value={inspectState.showButton}
+					onValueChange={setShowButton}
+				/>
+				<TableRow
+					label="Element mode / Token mode"
+					subLabel="Element mode lists components and their colors. Token mode groups by color with every matching token name."
+					trailing={
+						<TableRow.TrailingText
+							text={inspectState.mode === 'token' ? 'Token' : 'Element'}
+						/>
+					}
+					onPress={() =>
+						startMode(inspectState.mode === 'token' ? 'element' : 'token')
+					}
+				/>
+				<TableRow
+					label="Refresh floating button"
+					subLabel="Forces the app root to re-render so the pill appears without a reload."
+					arrow
+					onPress={handleRefreshPill}
+				/>
+				<TableRow
+					label="Probe mount points"
+					subLabel="Checks which known app components exist. Wait 4 seconds, then read Status."
+					arrow
+					onPress={probeMounts}
+				/>
+				<TableRow
+					label="Status"
+					subLabel={status || 'No status yet.'}
+					subLabelLineClamp={10}
+				/>
+			</TableRowGroup>
+
+			{inspectState.history.length > 0 && (
+				<TableRowGroup
+					title={`Inspection log (${inspectState.history.length})`}
+				>
+					{inspectState.history.map(report => (
+						<ReportRow
+							key={report.id}
+							report={report}
+							expanded={expandedReport === report.id}
+							onPress={() => handleReportPress(report)}
+						/>
+					))}
+				</TableRowGroup>
+			)}
+
+			{inspectState.history.length > 0 && (
+				<Button text="Clear log" variant="destructive" onPress={clearHistory} />
+			)}
+
+			<TableRowGroup
 				title="Theme colors"
 				description="Semantic and raw color tokens with their current values. Tap a token to outline every element using it — the name is what you put in the theme."
 			>
 				<TableRow
+					label="Current theme"
+					trailing={<TableRow.TrailingText text={currentTheme()} />}
+				/>
+				<TableRow
 					label="Semantic tokens"
 					trailing={
-						<TableRow.TrailingText text={String(cataloged.semantic.length)} />
+						<TableRow.TrailingText text={String(semanticEntries().length)} />
 					}
 				/>
 				<TableRow
 					label="Raw tokens"
 					trailing={
-						<TableRow.TrailingText text={String(cataloged.raw.length)} />
+						<TableRow.TrailingText text={String(rawEntries().length)} />
 					}
 				/>
+				{!tokensAvailable() && (
+					<TableRow
+						label="Token module not found yet."
+						subLabel="Values appear once Discord's color tokens load."
+					/>
+				)}
 			</TableRowGroup>
-
-			<Stack direction="horizontal" spacing={8}>
-				<Button
-					text="Refresh values"
-					variant="secondary"
-					grow
-					onPress={handleRefresh}
-				/>
-				<Button
-					text="Inspect element"
-					variant="primary"
-					grow
-					onPress={startPick}
-				/>
-			</Stack>
-
-			{pick?.active && (
-				<TableRowGroup title="Pick mode">
-					<TableRow
-						label="Tap an element to read its colors."
-						subLabel={
-							pick.result
-								? `Selected: ${pick.result.chain.join(' › ')}`
-								: pick.scanning
-									? `Reading UI tree… (${pick.scanned} views)`
-									: pick.minimized
-										? 'Overlay is minimized — navigate around, then tap the DevLab pill to pick.'
-										: 'The overlay is waiting for a tap.'
-						}
-						trailing={<TableRow.TrailingText text="Cancel" />}
-						onPress={cancelPick}
-					/>
-					<TableRow
-						label={pick.minimized ? 'Show capture overlay' : 'Minimize overlay'}
-						subLabel="Minimize to navigate to another screen before picking."
-						arrow
-						onPress={() => setPickMinimized(!pick.minimized)}
-					/>
-				</TableRowGroup>
-			)}
 
 			{highlight && (
 				<TableRowGroup title="Highlighting">
@@ -306,7 +368,9 @@ export function ColorsTab() {
 				{semantic.length === 0 ? (
 					<TableRow label="No semantic tokens matched." />
 				) : (
-					semantic.slice(0, MAX_TOKEN_ROWS).map(token => renderToken(token))
+					semantic
+						.slice(0, MAX_TOKEN_ROWS)
+						.map(entry => renderToken(entry, 'semantic'))
 				)}
 				{semantic.length > MAX_TOKEN_ROWS && (
 					<TableRow
@@ -319,7 +383,7 @@ export function ColorsTab() {
 				{raw.length === 0 ? (
 					<TableRow label="No raw tokens matched." />
 				) : (
-					raw.slice(0, MAX_TOKEN_ROWS).map(token => renderToken(token))
+					raw.slice(0, MAX_TOKEN_ROWS).map(entry => renderToken(entry, 'raw'))
 				)}
 				{raw.length > MAX_TOKEN_ROWS && (
 					<TableRow
@@ -353,13 +417,13 @@ export function ColorsTab() {
 											? element.colors
 													.map(
 														color =>
-															`${color.key}: ${displayColor(color.canonical)}\n  ${matchText(color)}`,
+															`${color.key}: ${analyzeColor(color.value).value ?? String(color.value)}\n  ${matchText(color)}`,
 													)
 													.join('\n')
 											: element.colors
 													.map(
 														color =>
-															`${color.key}: ${displayColor(color.canonical)}`,
+															`${color.key}: ${analyzeColor(color.value).value ?? String(color.value)}`,
 													)
 													.join(' · ')
 									}
@@ -380,7 +444,10 @@ export function ColorsTab() {
 									<TableRow
 										label="Copy full report"
 										trailing={<TableRow.TrailingText text="Copy" />}
-										onPress={() => handleCopyElement(element)}
+										onPress={() => {
+											Clipboard.setString(elementReport(element))
+											toast('Report copied.', 'success')
+										}}
 									/>
 								)}
 							</React.Fragment>
@@ -389,14 +456,9 @@ export function ColorsTab() {
 				</TableRowGroup>
 			)}
 
-			{pick?.result && (
-				<TableRowGroup title="Picked element">
-					<PickedReport result={pick.result} />
-				</TableRowGroup>
-			)}
-
 			<Text variant="text-sm/normal" color="text-muted">
-				Tip: long-press an element row to copy its full report.
+				Tip: the DL pill can be dragged anywhere. Tap it for modes, copying, and
+				to hide it.
 			</Text>
 		</TabScreen>
 	)

@@ -1,6 +1,7 @@
 import { Design } from '@valenced/discord/design'
 import { React, ReactNative } from '@valenced/react'
-import { DevLabMarker, HighlightHost } from './components/HighlightHost'
+import { OverlayWidgets } from './components/FloatingPill'
+import { DevLabMarker } from './components/HighlightHost'
 import { ColorsTab } from './tabs/ColorsTab'
 import { ComponentTab } from './tabs/ComponentTab'
 import { ErrorsTab } from './tabs/ErrorsTab'
@@ -28,23 +29,23 @@ export function DevLabSettings() {
 	const state = useSegmentedControlState({ items, pageWidth: width })
 
 	return (
-		<HighlightHost>
-			<DevLabMarker>
-				<View style={{ flex: 1 }}>
-					{/* SegmentedControl is a ScrollView, which grows by default and would fill the column. */}
-					<View
-						style={{
-							flexGrow: 0,
-							flexShrink: 0,
-							paddingHorizontal: 16,
-							paddingVertical: 12,
-						}}
-					>
-						<SegmentedControl state={state} />
-					</View>
-					<SegmentedControlPages state={state} style={{ flex: 1 }} />
+		<DevLabMarker>
+			<View style={{ flex: 1 }}>
+				{/* SegmentedControl is a ScrollView, which grows by default and would fill the column. */}
+				<View
+					style={{
+						flexGrow: 0,
+						flexShrink: 0,
+						paddingHorizontal: 16,
+						paddingVertical: 12,
+					}}
+				>
+					<SegmentedControl state={state} />
 				</View>
-			</DevLabMarker>
-		</HighlightHost>
+				<SegmentedControlPages state={state} style={{ flex: 1 }} />
+			</View>
+			{/* Fallback mount when the app-root overlay didn't attach. */}
+			<OverlayWidgets mount="devlab" />
+		</DevLabMarker>
 	)
 }
