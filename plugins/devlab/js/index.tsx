@@ -3,8 +3,10 @@ import { lookupGeneratedIconComponent } from '@valenced/utils/discord'
 import { setPluginApi } from './api'
 import { attachOverlay } from './components/FloatingPill'
 import {
+	beginSession,
+	hydrate,
+	markSessionClean,
 	recordPluginError,
-	restoreEntries,
 	startErrorLog,
 } from './features/errlog'
 import { startFluxLog, stopFluxLog } from './features/fluxlog'
@@ -62,17 +64,15 @@ export default plugin<{ jsonStorage: DevLabState }>({
 		setPluginApi(self)
 
 		// Live error log: console, Discord's logger, and uncaught errors.
+		beginSession()
 		cleanup(startErrorLog())
+		cleanup(markSessionClean)
 
 		// Errors other plugins report through the plugin API end up in the log too.
 		self.reportError = error =>
 			recordPluginError(error, 'Reported plugin error')
 
-		// Restore persisted entries once storage finishes loading.
-		void readStateWhenLoaded().then(state => restoreEntries(state.logs ?? []))
-
-		// Flux dispatches are tracked from startup so the log is complete.
-		startFluxLog()
+		// Flux tracking is opt-in — the Flux tab turns it on.
 		cleanup(stopFluxLog)
 
 		// Color tokens, tap logging, and the floating pill overlay.
@@ -83,7 +83,11 @@ export default plugin<{ jsonStorage: DevLabState }>({
 		})
 		attachOverlay(cleanup)
 		cleanup(shutdown)
-		void readStateWhenLoaded().then(state => applyInspectPrefs(state.inspect))
+		void readStateWhenLoaded().then(state => {
+			hydrate({ logs: state.logs, sessions: state.sessions })
+			applyInspectPrefs(state.inspect)
+			if (state.fluxEnabled) startFluxLog()
+		})
 
 		// DevLab also gets its own row in Discord settings :>
 		const undo: Array<() => void> = []

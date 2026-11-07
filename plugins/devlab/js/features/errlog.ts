@@ -13,6 +13,18 @@ export type LogEntry = {
 	msg: string
 	stack?: string
 	repeats?: number
+	/** Session id the entry was recorded in. */
+	sid?: string
+}
+
+export type SessionMeta = {
+	id: string
+	startedAt: number
+	endedAt?: number
+	/** False until the plugin shuts down cleanly. */
+	clean: boolean
+	/** Set when a fatal error was recorded in this session. */
+	crashed: boolean
 }
 
 export const OWN_ID = 'shin.dev-lab'
@@ -175,14 +187,109 @@ function callSite(
 
 // ── memory + listeners ──────────────────────────────────────────────────────
 
+const MAX_SESSIONS = 6
+
 const memory: LogEntry[] = []
+const sessionList: SessionMeta[] = []
+const current: SessionMeta = newSession()
 const listeners = new Set<() => void>()
 let persistTimer: ReturnType<typeof setTimeout> | undefined
 let inside = false
 let paused = false
 
+function newSession(): SessionMeta {
+	return {
+		id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+		startedAt: Date.now(),
+		clean: false,
+		crashed: false,
+	}
+}
+
 export function entries(): readonly LogEntry[] {
 	return memory
+}
+
+export function sessions(): readonly SessionMeta[] {
+	return sessionList
+}
+
+export function currentSession(): SessionMeta {
+	return current
+}
+
+/** Entries of one session, newest last. */
+export function entriesFor(sid: string): LogEntry[] {
+	return memory.filter(entry => (entry.sid ?? '') === sid)
+}
+
+/**
+ * Registers the fresh session created at plugin start. Call once, before
+ * hydration — entries captured before storage loads then belong to this
+ * session.
+ */
+export function beginSession() {
+	if (!sessionList.includes(current)) sessionList.push(current)
+	trimSessions()
+}
+
+/** Marks the current session as ended cleanly (plugin shutdown). */
+export function markSessionClean() {
+	current.clean = true
+	current.endedAt = Date.now()
+	persistNow()
+}
+
+export function sessionEndedBadly(session: SessionMeta) {
+	return !session.clean
+}
+
+/**
+ * Restores persisted sessions and entries, keeping anything already
+ * captured in this run. Call right after beginSession.
+ */
+export function hydrate(saved: {
+	logs?: LogEntry[]
+	sessions?: SessionMeta[]
+}) {
+	const oldSessions = (saved.sessions ?? [])
+		.filter(session => session.id !== current.id)
+		.slice(-MAX_SESSIONS)
+	const oldLogs = (saved.logs ?? [])
+		.filter(entry => (entry.sid ?? '') !== current.id)
+		.slice(-MEMORY_LIMIT)
+
+	if (oldSessions.length) {
+		for (const session of oldSessions) {
+			if (!session.clean && !session.endedAt) session.endedAt = Date.now()
+		}
+		sessionList.unshift(...oldSessions)
+	}
+
+	// Entries from before session tracking get their own bucket.
+	if (oldLogs.some(entry => !entry.sid)) {
+		sessionList.unshift({
+			id: '',
+			startedAt: oldLogs[0]?.t ?? Date.now(),
+			endedAt: oldLogs[oldLogs.length - 1]?.t,
+			clean: true,
+			crashed: oldLogs.some(entry => entry.lvl === 'fatal'),
+		})
+	}
+
+	memory.unshift(...oldLogs)
+	trimSessions()
+	notify()
+}
+
+function trimSessions() {
+	if (sessionList.length <= MAX_SESSIONS) return
+	const dropped = sessionList.splice(0, sessionList.length - MAX_SESSIONS)
+	const keep = new Set(sessionList.map(session => session.id))
+	for (let i = memory.length - 1; i >= 0; i--) {
+		if (!keep.has(memory[i].sid ?? '')) memory.splice(i, 1)
+	}
+	void dropped
 }
 
 export function onEntries(listener: () => void): () => void {
@@ -207,11 +314,12 @@ export function clearEntries() {
 	notify()
 }
 
-/** Replaces the in-memory log — used to hydrate persisted entries at startup. */
-export function restoreEntries(saved: LogEntry[]) {
-	memory.length = 0
-	memory.push(...saved.slice(-MEMORY_LIMIT))
-	notify()
+function persistNow() {
+	if (persistTimer) {
+		clearTimeout(persistTimer)
+		persistTimer = undefined
+	}
+	void saveLogs(memory.slice(-MEMORY_LIMIT), sessionList.slice(-MAX_SESSIONS))
 }
 
 function notify() {
@@ -228,7 +336,7 @@ function schedulePersist() {
 	if (persistTimer) return
 	persistTimer = setTimeout(() => {
 		persistTimer = undefined
-		void saveLogs(memory.slice(-MEMORY_LIMIT))
+		void saveLogs(memory.slice(-MEMORY_LIMIT), sessionList.slice(-MAX_SESSIONS))
 	}, PERSIST_MS)
 }
 
@@ -236,7 +344,13 @@ function record(entry: LogEntry) {
 	memory.push(entry)
 	if (memory.length > MEMORY_LIMIT)
 		memory.splice(0, memory.length - MEMORY_LIMIT)
-	schedulePersist()
+	if (entry.lvl === 'fatal') {
+		// Crashes must survive an app restart — persist immediately.
+		current.crashed = true
+		persistNow()
+	} else {
+		schedulePersist()
+	}
 	notify()
 }
 
@@ -278,6 +392,7 @@ function capture(
 			tag,
 			msg,
 			stack: stack ?? (serious ? callSite(raw, overridden) : undefined),
+			sid: current.id,
 		})
 	} catch {
 		// Never break the caller.
@@ -350,6 +465,25 @@ export function startErrorLog(): () => void {
 		}
 	}
 
+	// Unhandled promise rejections, where the runtime supports it.
+	const g = globalThis as any
+	if (
+		typeof g.onunhandledrejection === 'function' ||
+		'onunhandledrejection' in g
+	) {
+		const previousRejection = g.onunhandledrejection
+		g.onunhandledrejection = (event: any) => {
+			const reason = event?.reason ?? event
+			capture('uncaught', 'error', [reason], 'unhandled rejection')
+			return typeof previousRejection === 'function'
+				? previousRejection(event)
+				: undefined
+		}
+		unpatches.push(() => {
+			if (g.onunhandledrejection) g.onunhandledrejection = previousRejection
+		})
+	}
+
 	// Discord's own logger (Logger.prototype.*), tagged with the logger name.
 	const restores: Array<() => void> = []
 	const proto = (commonLogger as any)?.Logger?.prototype
@@ -387,6 +521,19 @@ function loggerName(logger: any): string | undefined {
 }
 
 // ── formatting for the UI ───────────────────────────────────────────────────
+
+/** "Today 14:32" / "5 Nov 14:32" — checkup-style friendly time. */
+export function formatWhen(at: number): string {
+	const date = new Date(at)
+	const today = new Date()
+	const time = date.toLocaleTimeString(undefined, {
+		hour: '2-digit',
+		minute: '2-digit',
+	})
+	return date.toDateString() === today.toDateString()
+		? `Today ${time}`
+		: `${date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} ${time}`
+}
 
 export function formatEntry(entry: LogEntry): string {
 	const time = new Date(entry.t).toISOString().slice(11, 23)

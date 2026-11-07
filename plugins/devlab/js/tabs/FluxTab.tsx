@@ -8,11 +8,15 @@ import {
 	clearFluxLog,
 	getFluxLog,
 	getFluxTypeCounts,
+	isFluxLogging,
 	isFluxPaused,
 	MAX_FLUX_LOG,
 	serializeFluxEntry,
 	setFluxPaused,
+	startFluxLog,
+	stopFluxLog,
 } from '../features/fluxlog'
+import { saveFluxEnabled } from '../storage'
 import type { FluxLogEntry } from '../features/fluxlog'
 
 const { Button, Stack, TableRow, TableRowGroup, TableSwitchRow } = Design
@@ -24,11 +28,19 @@ export function FluxTab() {
 	const [filter, setFilter] = React.useState('')
 	const [log, setLog] = React.useState<FluxLogEntry[]>(getFluxLog)
 	const [paused, setPaused] = React.useState(isFluxPaused)
+	const [tracking, setTracking] = React.useState(isFluxLogging)
 	const [expandedId, setExpandedId] = React.useState<string | null>(null)
 
 	React.useEffect(() => addFluxLogListener(() => setLog(getFluxLog())), [])
 
 	const counts = React.useMemo(() => getFluxTypeCounts(), [log])
+
+	const handleToggleTracking = (value: boolean) => {
+		if (value) startFluxLog()
+		else stopFluxLog()
+		setTracking(value)
+		void saveFluxEnabled(value)
+	}
 
 	const handleTogglePause = (value: boolean) => {
 		setFluxPaused(value)
@@ -69,8 +81,14 @@ export function FluxTab() {
 		<TabScreen>
 			<TableRowGroup
 				title="Flux Tracker"
-				description="Logs every dispatch through the Flux dispatcher while DevLab is loaded."
+				description="Off by default. Turn it on to log every dispatch through the Flux dispatcher."
 			>
+				<TableSwitchRow
+					label="Flux tracking"
+					subLabel="Records every dispatch while it is on. Off by default — leave it off unless you are debugging."
+					value={tracking}
+					onValueChange={handleToggleTracking}
+				/>
 				<TableRow
 					label="Captured events"
 					trailing={<TableRow.TrailingText text={String(log.length)} />}
