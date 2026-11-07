@@ -167,6 +167,42 @@ export function styleColors(fiber: Fiber): StyleColor[] {
 	return out
 }
 
+const PROPS_COLOR_KEYS = [
+	'color',
+	'fill',
+	'stroke',
+	'tintColor',
+	'backgroundColor',
+]
+
+/**
+ * Normalized color values used by an element's props — allocation-light so
+ * it is safe to run during element creation.
+ */
+export function propsColorValues(props: any): string[] {
+	const out: string[] = []
+	const style = props.style
+
+	if (style && typeof style === 'object') {
+		const grab = (part: any) => {
+			if (!part || typeof part !== 'object') return
+			for (const key of STYLE_COLOR_KEYS) {
+				const normalized = normalizeColor(part[key])
+				if (normalized) out.push(normalized)
+			}
+		}
+		if (Array.isArray(style)) for (const part of style) grab(part)
+		else grab(style)
+	}
+
+	for (const key of PROPS_COLOR_KEYS) {
+		const normalized = normalizeColor(props[key])
+		if (normalized) out.push(normalized)
+	}
+
+	return out
+}
+
 /** Live elements whose style uses the given normalized color. */
 export function findElementsWithColor(
 	normalized: string,

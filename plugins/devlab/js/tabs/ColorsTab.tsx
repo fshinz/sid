@@ -45,8 +45,9 @@ import type { TokenEntry } from '../features/tokens'
 const { Button, TableRow, TableRowGroup, TableSwitchRow, Text } = Design
 const { View } = ReactNative
 
-const MAX_TOKEN_ROWS = 150
 const MAX_ELEMENT_ROWS = 80
+const PAGE = 30
+const ELEMENT_PAGE = 20
 const TOAST_KEY = 'shin.devlab.colors'
 
 type ElementRow = ElementInfo & { key: string }
@@ -163,6 +164,11 @@ export function ColorsTab() {
 	)
 	const [elements, setElements] = React.useState<ElementRow[]>([])
 	const [scanning, setScanning] = React.useState(false)
+	// Token and element lists render in pages so tab switching stays fast.
+	const [shown, setShown] = React.useState(PAGE)
+	const [elemShown, setElemShown] = React.useState(ELEMENT_PAGE)
+
+	React.useEffect(() => setShown(PAGE), [filter])
 
 	React.useEffect(() => subscribe(rerender), [])
 
@@ -394,13 +400,13 @@ export function ColorsTab() {
 				{semantic.length === 0 ? (
 					<TableRow label="No semantic tokens matched." />
 				) : (
-					semantic
-						.slice(0, MAX_TOKEN_ROWS)
-						.map(entry => renderToken(entry, 'semantic'))
+					semantic.slice(0, shown).map(entry => renderToken(entry, 'semantic'))
 				)}
-				{semantic.length > MAX_TOKEN_ROWS && (
+				{semantic.length > shown && (
 					<TableRow
-						label={`${semantic.length - MAX_TOKEN_ROWS} more. Narrow the filter to see them.`}
+						label={`Show ${Math.min(30, semantic.length - shown)} more (${semantic.length - shown} left)`}
+						arrow
+						onPress={() => setShown(value => value + 30)}
 					/>
 				)}
 			</TableRowGroup>
@@ -409,11 +415,13 @@ export function ColorsTab() {
 				{raw.length === 0 ? (
 					<TableRow label="No raw tokens matched." />
 				) : (
-					raw.slice(0, MAX_TOKEN_ROWS).map(entry => renderToken(entry, 'raw'))
+					raw.slice(0, shown).map(entry => renderToken(entry, 'raw'))
 				)}
-				{raw.length > MAX_TOKEN_ROWS && (
+				{raw.length > shown && (
 					<TableRow
-						label={`${raw.length - MAX_TOKEN_ROWS} more. Narrow the filter to see them.`}
+						label={`Show ${Math.min(30, raw.length - shown)} more (${raw.length - shown} left)`}
+						arrow
+						onPress={() => setShown(value => value + 30)}
 					/>
 				)}
 			</TableRowGroup>
@@ -432,7 +440,7 @@ export function ColorsTab() {
 
 			{elements.length > 0 && (
 				<TableRowGroup title={`Elements (${elements.length})`}>
-					{elements.map(element => {
+					{elements.slice(0, elemShown).map(element => {
 						const expanded = expandedElement === element.key
 						const details = colorDetails(element.colors)
 						return (
@@ -477,6 +485,13 @@ export function ColorsTab() {
 							</React.Fragment>
 						)
 					})}
+					{elements.length > elemShown && (
+						<TableRow
+							label={`Show ${Math.min(ELEMENT_PAGE, elements.length - elemShown)} more (${elements.length - elemShown} left)`}
+							arrow
+							onPress={() => setElemShown(value => value + ELEMENT_PAGE)}
+						/>
+					)}
 				</TableRowGroup>
 			)}
 
