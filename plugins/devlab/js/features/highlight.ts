@@ -1,4 +1,10 @@
-import { findElementsWithColor, markNative, unmarkNative } from './elementscan'
+import {
+	findElementsWithColor,
+	markNative,
+	propsColorValues,
+	unmarkNative,
+} from './elementscan'
+import { addElementTransform } from './inspect'
 import type { NativeMark } from './elementscan'
 
 export type ActiveHighlight = {
@@ -7,12 +13,23 @@ export type ActiveHighlight = {
 	label: string
 	/** Tint color, `#RRGGBB`. */
 	color: string
+	/** Normalized color being tinted. */
+	value: string
+	/** Component-name restriction for single-element highlights. */
+	only?: string
 	matched: number
 	marks: NativeMark[]
 }
 
 let active: ActiveHighlight[] = []
 const listeners = new Set<() => void>()
+let transformOff: (() => void) | undefined
+let nudge: (() => void) | undefined
+
+/** Registered by the overlay so tint changes re-render the app root. */
+export function setHighlightNudge(fn: () => void) {
+	nudge = fn
+}
 
 function notify() {
 	for (const listener of [...listeners]) {
@@ -35,6 +52,57 @@ export function getHighlights(): readonly ActiveHighlight[] {
 	return active
 }
 
+function nameOf(type: any): string | undefined {
+	if (typeof type === 'string') return type
+	if (typeof type === 'function')
+		return type.displayName || type.name || undefined
+	if (type && typeof type === 'object') {
+		return (
+			type.displayName ||
+			type.render?.displayName ||
+			type.render?.name ||
+			type.type?.displayName ||
+			type.type?.name
+		)
+	}
+}
+
+/**
+ * Tints elements at render time by overriding their style — this works on
+ * every React Native architecture, unlike setNativeProps alone.
+ */
+function tintTransform(type: any, props: any) {
+	if (!active.length || !props || typeof props !== 'object') return
+	const values = propsColorValues(props)
+	if (!values.length) return
+
+	for (const item of active) {
+		if (!values.includes(item.value)) continue
+		if (item.only && nameOf(type) !== item.only) continue
+		return {
+			...props,
+			style: [
+				props.style,
+				{
+					backgroundColor: `${item.color}66`,
+					borderColor: item.color,
+					borderWidth: 2,
+					borderStyle: 'solid',
+				},
+			],
+		}
+	}
+}
+
+function syncTransform() {
+	if (active.length && !transformOff) {
+		transformOff = addElementTransform(tintTransform)
+	} else if (!active.length && transformOff) {
+		transformOff()
+		transformOff = undefined
+	}
+}
+
 function tint(targets: { fiber: any }[], color: string) {
 	const marks: NativeMark[] = []
 	for (const target of targets) {
@@ -52,6 +120,8 @@ export function stopHighlight(id?: string) {
 		else keep.push(item)
 	}
 	active = keep
+	syncTransform()
+	nudge?.()
 	notify()
 }
 
@@ -79,10 +149,14 @@ export function highlightColor(
 			id,
 			label,
 			color,
+			value,
 			matched: elements.length,
 			marks: tint(elements, color),
 		},
 	]
+	syncTransform()
+	// Re-render so the render-time tint lands on existing elements too.
+	nudge?.()
 	notify()
 	return elements.length
 }
@@ -106,6 +180,7 @@ export function highlightElement(
 		element => element.chain.join('>') === chain.join('>'),
 	)
 	const targets = match ? [match] : elements.slice(0, 1)
+	const only = nameOf(targets[0]?.fiber?.type) ?? id
 
 	active = [
 		...active,
@@ -113,10 +188,14 @@ export function highlightElement(
 			id,
 			label: id,
 			color,
+			value,
+			only,
 			matched: targets.length,
 			marks: tint(targets, color),
 		},
 	]
+	syncTransform()
+	nudge?.()
 	notify()
 	return targets.length
 }

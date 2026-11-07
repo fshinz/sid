@@ -307,16 +307,47 @@ export function reportToText(r: Report, mode: InspectMode = inspectState.mode) {
 
 // ── patching ────────────────────────────────────────────────────────────────
 
+export type ElementTransform = (type: any, props: any) => any | undefined
+
+const transforms = new Set<ElementTransform>()
+
+/**
+ * Registers a props transformer that runs for every element created while
+ * at least one transform is registered — used for render-time highlight
+ * tinting. Returns an unregister function.
+ */
+export function addElementTransform(fn: ElementTransform) {
+	transforms.add(fn)
+	syncPatches()
+	return () => {
+		transforms.delete(fn)
+		syncPatches()
+	}
+}
+
 function augment(type: any, props: any) {
 	if (!props || typeof props !== 'object' || typeof type === 'symbol') return
-	const entries = readColors(props)
-	if (!entries.length) return
+	let out = props
+
+	for (const fn of transforms) {
+		try {
+			const next = fn(type, out)
+			if (next && next !== out) out = next
+		} catch {
+			// Never break rendering.
+		}
+	}
+
+	if (!inspectState.enabled) return out === props ? undefined : out
+
+	const entries = readColors(out)
+	if (!entries.length) return out === props ? undefined : out
 
 	const name = typeName(type) ?? 'Unknown'
-	const prev = props.onTouchStart
+	const prev = out.onTouchStart
 
 	return {
-		...props,
+		...out,
 		onTouchStart(e: any) {
 			try {
 				onTap(name, entries, props)
@@ -341,10 +372,9 @@ function rewrite(args: any) {
 
 const jsxModules: any[] = []
 const unpatches: (() => void)[] = []
+let patched = false
 
-function patchJsxModule(m: any) {
-	jsxModules.push(m)
-	if (!inspectState.enabled) return
+function patchModuleKeys(m: any) {
 	for (const key of ['jsx', 'jsxs', 'jsxDEV']) {
 		if (typeof m?.[key] !== 'function') continue
 		try {
@@ -353,6 +383,11 @@ function patchJsxModule(m: any) {
 			// Namespace may be frozen.
 		}
 	}
+}
+
+function patchJsxModule(m: any) {
+	jsxModules.push(m)
+	if (patched) patchModuleKeys(m)
 }
 
 export function findJsxRuntime() {
@@ -374,15 +409,9 @@ function install() {
 
 	let n = 0
 	for (const m of jsxModules) {
-		for (const key of ['jsx', 'jsxs', 'jsxDEV']) {
-			if (typeof m?.[key] !== 'function') continue
-			try {
-				unpatches.push(before(m, key, rewrite as any))
-				n++
-			} catch {
-				// Namespace may be frozen.
-			}
-		}
+		const countFrom = unpatches.length
+		patchModuleKeys(m)
+		n += unpatches.length - countFrom
 	}
 	inspectState.status.jsx = n ? `${n} patched` : 'not patched'
 }
@@ -394,6 +423,18 @@ function uninstall() {
 		} catch {
 			// Ignore.
 		}
+	}
+}
+
+/** The element-creation patch stays up while inspecting OR tinting is active. */
+function syncPatches() {
+	const want = inspectState.enabled || transforms.size > 0
+	if (want && !patched) {
+		patched = true
+		install()
+	} else if (!want && patched) {
+		patched = false
+		uninstall()
 	}
 }
 
@@ -440,11 +481,8 @@ export function applyInspectPrefs(prefs: Partial<InspectPrefs> | undefined) {
 // ── controls ────────────────────────────────────────────────────────────────
 
 export function setInspecting(on: boolean) {
-	if (on !== inspectState.enabled) {
-		inspectState.enabled = on
-		if (on) install()
-		else uninstall()
-	}
+	inspectState.enabled = on
+	syncPatches()
 	persist()
 	emit()
 }
@@ -477,5 +515,8 @@ export function clearHistory() {
 }
 
 export function shutdown() {
-	setInspecting(false)
+	inspectState.enabled = false
+	transforms.clear()
+	patched = false
+	uninstall()
 }

@@ -5,7 +5,11 @@ import { getModules } from '@valenced/modules/finders'
 import { withName } from '@valenced/modules/finders/filters'
 import { instead } from '@valenced/patcher'
 import { React, ReactNative } from '@valenced/react'
-import { getHighlights, stopHighlight } from '../features/highlight'
+import {
+	getHighlights,
+	setHighlightNudge,
+	stopHighlight,
+} from '../features/highlight'
 import {
 	inspectState,
 	markMenuClosed,
@@ -335,6 +339,10 @@ function attachToast() {
 
 export function attachOverlay(cleanup: (fn: () => void) => void) {
 	inspectState.status.overlay_root = 'waiting for AppContainer'
+
+	// Highlight tint changes re-render the root so they land everywhere.
+	setHighlightNudge(forceRootUpdate)
+	cleanup(() => setHighlightNudge(() => {}))
 
 	attachRoot()
 

@@ -1,7 +1,6 @@
-import { ToastActionCreators } from '@valenced/discord/actions'
 import { Design } from '@valenced/discord/design'
 import { Clipboard } from '@valenced/externals/react-native-clipboard'
-import { React } from '@valenced/react'
+import { React, ReactNative } from '@valenced/react'
 import { lookupGeneratedIconComponent } from '@valenced/utils/discord'
 import { TabScreen } from '../components/TabScreen'
 import {
@@ -17,17 +16,47 @@ import {
 } from '../features/errlog'
 import type { LogEntry, SessionMeta } from '../features/errlog'
 
-const { Button, Stack, TableRow, TableRowGroup, TableSwitchRow } = Design
+const {
+	Card,
+	TableRadioGroup,
+	TableRadioRow,
+	TableRow,
+	TableRowGroup,
+	TableSwitchRow,
+	Text,
+	TextInput,
+} = Design
+const { Pressable, ScrollView, Share, View, useWindowDimensions } = ReactNative
 
-const MAX_ROWS = 100
-const TOAST_KEY = 'shin.devlab.errors'
+const SHOWN = 300
 
-type Filter = 'errors' | 'warnings' | 'all'
-const FILTERS: Array<{ id: Filter; label: string }> = [
-	{ id: 'errors', label: 'Errors' },
-	{ id: 'warnings', label: 'Warnings' },
-	{ id: 'all', label: 'Everything' },
-]
+type Severity = 'all' | 'warn' | 'error'
+type Picking = 'level' | 'who'
+
+const SEVERE: Record<Severity, (level: string) => boolean> = {
+	all: () => true,
+	warn: level => level === 'warn' || level === 'error' || level === 'fatal',
+	error: level => level === 'error' || level === 'fatal',
+}
+
+const LEVEL_LABEL: Record<Severity, string> = {
+	all: 'Everything',
+	warn: 'Warnings and errors',
+	error: 'Errors',
+}
+
+const DISCORD = '(discord)'
+
+function whoWrote(entry: LogEntry) {
+	return entry.plugin ?? DISCORD
+}
+
+function colourFor(level: string) {
+	if (level === 'error' || level === 'fatal') return 'text-feedback-critical'
+	if (level === 'warn') return 'text-feedback-warning'
+	if (level === 'debug') return 'text-muted'
+	return 'text-default'
+}
 
 function rowIcon(...names: string[]) {
 	const DesignAny = Design as any
@@ -44,15 +73,6 @@ function rowIcon(...names: string[]) {
 		return <Component />
 	}
 	return undefined
-}
-
-function whoLabel(entry: LogEntry) {
-	return (
-		entry.plugin ??
-		(entry.src === 'discord'
-			? `Discord${entry.tag ? `/${entry.tag}` : ''}`
-			: 'Discord')
-	)
 }
 
 function sessionCounts(entries: LogEntry[]) {
@@ -85,110 +105,128 @@ function sessionLine(session: SessionMeta, entries: LogEntry[]) {
 		.join(' · ')
 }
 
-function matches(entry: LogEntry, filter: Filter) {
-	if (filter === 'all') return true
-	if (filter === 'warnings') return entry.lvl === 'warn'
-	return entry.lvl === 'error' || entry.lvl === 'fatal'
-}
-
-function LogRow({
-	entry,
-	expanded,
-	onPress,
-}: {
-	entry: LogEntry
-	expanded: boolean
-	onPress: () => void
-}) {
-	const serious = entry.lvl === 'error' || entry.lvl === 'fatal'
-	return (
-		<TableRow
-			icon={
-				serious
-					? rowIcon('CircleErrorIcon', 'CircleWarningIcon')
-					: rowIcon('CircleInformationIcon', 'CircleErrorIcon')
-			}
-			label={entry.msg}
-			labelLineClamp={2}
-			subLabel={
-				expanded
-					? formatEntry(entry)
-					: `${formatWhen(entry.t)} · ${whoLabel(entry)}${
-							entry.repeats ? ` · ×${entry.repeats + 1}` : ''
-						}`
-			}
-			subLabelLineClamp={expanded ? 30 : 1}
-			trailing={
-				<TableRow.TrailingText
-					text={expanded ? 'Copy' : entry.lvl.toUpperCase()}
-				/>
-			}
-			onPress={onPress}
-		/>
-	)
+function statusOf(session: SessionMeta) {
+	if (session.clean) return 'Ended normally'
+	if (session.crashed) return 'Crash recorded'
+	if (session.id === currentSession().id) return 'Running now'
+	return 'Ended unexpectedly'
 }
 
 export function ErrorsTab() {
 	const [, rerender] = React.useReducer((count: number) => count + 1, 0)
-	const [expanded, setExpanded] = React.useState<number | null>(null)
-	const [filter, setFilter] = React.useState<Filter>('errors')
+	const [severity, setSeverity] = React.useState<Severity>('warn')
+	const [who, setWho] = React.useState('all')
+	const [picking, setPicking] = React.useState<Picking | undefined>()
+	const [query, setQuery] = React.useState('')
 	const [selected, setSelected] = React.useState<string | null>(null)
 
-	React.useEffect(() => onEntries(rerender), [])
+	// Throttled live updates — bursts of log calls must not re-render
+	// per entry.
+	React.useEffect(() => {
+		let timer: ReturnType<typeof setTimeout> | undefined
+		const off = onEntries(() => {
+			if (!timer) {
+				timer = setTimeout(() => {
+					timer = undefined
+					rerender()
+				}, 500)
+			}
+		})
+		return () => {
+			off()
+			if (timer) clearTimeout(timer)
+		}
+	}, [])
 
 	const all = sessions()
 	const current = currentSession()
 	const selectedSession =
 		all.find(session => session.id === selected) ?? current
-	const shown = entriesFor(selectedSession.id)
-	const fatalAll = all.flatMap(session =>
-		entriesFor(session.id).filter(entry => entry.lvl === 'fatal'),
-	)
-	const visible = shown
-		.filter(entry => matches(entry, filter))
-		.slice()
-		.reverse()
-	const filterIndex = FILTERS.findIndex(item => item.id === filter)
+	const shownEntries = entriesFor(selectedSession.id)
 	const past = all
 		.filter(session => session.id !== current.id)
 		.slice()
 		.reverse()
 
-	const toast = (text: string, variant?: 'success' | 'critical') => {
+	const writers = [...new Set(shownEntries.map(whoWrote))].sort()
+	const needle = query.trim().toLowerCase()
+	const matching = shownEntries.filter(
+		entry =>
+			SEVERE[severity](entry.lvl) &&
+			(who === 'all' || whoWrote(entry) === who) &&
+			(!needle ||
+				`${entry.msg} ${entry.plugin ?? ''} ${entry.tag ?? ''}`
+					.toLowerCase()
+					.includes(needle)),
+	)
+	const total = matching.length
+	const lines = matching.slice(-SHOWN).reverse()
+
+	const shownText = () =>
+		lines.length
+			? `DevLab log · ${formatWhen(selectedSession.startedAt)}\n${lines
+					.map(formatEntry)
+					.join('\n')}`
+			: ''
+
+	const handleCopyShown = () => {
+		const text = shownText()
 		try {
-			ToastActionCreators.open(TOAST_KEY, { text, variant })
+			Clipboard.setString(text || 'Nothing to copy.')
 		} catch {
 			// Ignore.
 		}
 	}
 
-	const handleEntryPress = (entry: LogEntry, index: number) => {
-		if (expanded !== index) {
-			setExpanded(index)
-			return
+	const handleShareShown = () => {
+		const text = shownText()
+		if (!text) return
+		try {
+			void Share.share({ message: text })
+		} catch {
+			// Ignore.
 		}
-		Clipboard.setString(formatEntry(entry))
-		setExpanded(null)
-		toast('Entry copied.', 'success')
 	}
 
-	const handleCopyAll = () => {
-		const text = shown.map(formatEntry).join('\n\n')
-		Clipboard.setString(text || 'No log entries.')
-		toast('Session log copied.', 'success')
+	const handleClear = () => {
+		clearEntries()
+		setWho('all')
+		setQuery('')
 	}
+
+	const toggle = (which: Picking) =>
+		setPicking(picking === which ? undefined : which)
+	const logHeight = Math.max(
+		280,
+		Math.round(useWindowDimensions().height * 0.55),
+	)
 
 	return (
 		<TabScreen>
+			<TableRowGroup hasIcons>
+				<TableRow
+					icon={
+						selectedSession.clean
+							? rowIcon('CircleCheckIcon', 'CircleInformationIcon')
+							: rowIcon('CircleErrorIcon', 'CircleWarningIcon')
+					}
+					label={statusOf(selectedSession)}
+					subLabel={`Started ${formatWhen(selectedSession.startedAt)}${
+						selectedSession.crashed ? ' · a crash was recorded' : ''
+					} · ${sessionLine(selectedSession, shownEntries)}`}
+					subLabelLineClamp={2}
+				/>
+			</TableRowGroup>
+
 			<TableRowGroup
-				title="Session"
-				description="Every session is kept with its log, so crashes and errors survive an app restart. Sessions that never ended cleanly are marked."
-				hasIcons
+				title="Sessions"
+				description="Kept across restarts, so crashes and errors survive an app restart. Tap to view a session's log."
 			>
 				<TableRow
 					icon={rowIcon('ClockIcon', 'CircleInformationIcon')}
 					label="This session"
 					subLabel={sessionLine(current, entriesFor(current.id))}
+					subLabelLineClamp={1}
 					trailing={
 						<TableRow.TrailingText
 							text={selectedSession.id === current.id ? 'Viewing' : 'View'}
@@ -196,7 +234,7 @@ export function ErrorsTab() {
 					}
 					onPress={() => {
 						setSelected(current.id)
-						setExpanded(null)
+						setWho('all')
 					}}
 				/>
 				{past.map(session => (
@@ -209,7 +247,7 @@ export function ErrorsTab() {
 						}
 						label={formatWhen(session.startedAt)}
 						subLabel={sessionLine(session, entriesFor(session.id))}
-						subLabelLineClamp={2}
+						subLabelLineClamp={1}
 						trailing={
 							<TableRow.TrailingText
 								text={selectedSession.id === session.id ? 'Viewing' : 'View'}
@@ -217,40 +255,27 @@ export function ErrorsTab() {
 						}
 						onPress={() => {
 							setSelected(session.id)
-							setExpanded(null)
+							setWho('all')
 						}}
 					/>
 				))}
 			</TableRowGroup>
 
-			{fatalAll.length > 0 && (
-				<TableRowGroup title={`Crashes (${fatalAll.length})`}>
-					{fatalAll
-						.slice(-10)
-						.reverse()
-						.map((entry, index) => (
-							<TableRow
-								key={`${entry.t}-${index}`}
-								icon={rowIcon('CircleErrorIcon', 'CircleWarningIcon')}
-								label={entry.msg}
-								labelLineClamp={2}
-								subLabel={`${formatWhen(entry.t)} · ${whoLabel(entry)} · tap to copy`}
-								subLabelLineClamp={1}
-								onPress={() => Clipboard.setString(formatEntry(entry))}
-							/>
-						))}
-				</TableRowGroup>
-			)}
-
-			<TableRowGroup title={`Log — ${formatWhen(selectedSession.startedAt)}`}>
+			<TableRowGroup title="Show">
 				<TableRow
-					label="Filter"
-					subLabel="Errors shows errors and crashes first — the important stuff."
-					trailing={<TableRow.TrailingText text={FILTERS[filterIndex].label} />}
-					onPress={() =>
-						setFilter(FILTERS[(filterIndex + 1) % FILTERS.length].id)
-					}
+					label="Level"
+					subLabel={LEVEL_LABEL[severity]}
+					arrow
+					onPress={() => toggle('level')}
 				/>
+				{writers.length > 1 && (
+					<TableRow
+						label="Written by"
+						subLabel={who === 'all' ? 'Anyone' : who}
+						arrow
+						onPress={() => toggle('who')}
+					/>
+				)}
 				<TableSwitchRow
 					label="Capture"
 					subLabel="When off, new console output and errors are not recorded."
@@ -259,49 +284,130 @@ export function ErrorsTab() {
 				/>
 			</TableRowGroup>
 
-			<Stack direction="horizontal" spacing={8}>
-				<Button
-					text="Copy session"
-					variant="secondary"
-					grow
-					disabled={shown.length === 0}
-					onPress={handleCopyAll}
-				/>
-				<Button
-					text="Clear log"
-					variant="destructive"
-					grow
-					disabled={shown.length === 0}
-					onPress={() => {
-						clearEntries()
-						setExpanded(null)
+			{picking === 'level' && (
+				<TableRadioGroup
+					defaultValue={severity}
+					onChange={(value: string) => {
+						setSeverity(value as Severity)
+						setPicking(undefined)
 					}}
-				/>
-			</Stack>
+				>
+					<TableRadioRow label="Everything" value="all" />
+					<TableRadioRow label="Warnings and errors" value="warn" />
+					<TableRadioRow label="Errors" value="error" />
+				</TableRadioGroup>
+			)}
 
-			<TableRowGroup
-				title={`${FILTERS[filterIndex].label} (${visible.length})`}
+			{picking === 'who' && (
+				<TableRadioGroup
+					defaultValue={who}
+					onChange={(value: string) => {
+						setWho(value)
+						setPicking(undefined)
+					}}
+				>
+					<TableRadioRow label="Anyone" value="all" />
+					{writers.map(writer => (
+						<TableRadioRow key={writer} label={writer} value={writer} />
+					))}
+				</TableRadioGroup>
+			)}
+
+			<TextInput
+				placeholder="Search"
+				value={query}
+				onChange={(value: string) => setQuery(value)}
+				isClearable
+				returnKeyType="search"
+			/>
+
+			<Card
+				variant="secondary"
+				border="none"
+				style={{ padding: 0, overflow: 'hidden' }}
 			>
-				{visible.length === 0 ? (
-					<TableRow label="Nothing logged in this session." />
-				) : (
-					visible
-						.slice(0, MAX_ROWS)
-						.map((entry, index) => (
-							<LogRow
-								key={`${entry.t}-${index}`}
-								entry={entry}
-								expanded={expanded === index}
-								onPress={() => handleEntryPress(entry, index)}
-							/>
-						))
-				)}
-				{visible.length > MAX_ROWS && (
-					<TableRow
-						label={`${visible.length - MAX_ROWS} older entries not shown. Narrow the filter or copy the session.`}
-					/>
-				)}
-			</TableRowGroup>
+				<View
+					style={{
+						flexDirection: 'row',
+						alignItems: 'center',
+						justifyContent: 'space-between',
+						paddingHorizontal: 16,
+						paddingVertical: 10,
+					}}
+				>
+					<Text color="text-muted" variant="text-sm/semibold">
+						{total > SHOWN
+							? `NEWEST ${SHOWN} OF ${total}`
+							: `${total} LINE${total === 1 ? '' : 'S'}`}
+					</Text>
+					<View style={{ flexDirection: 'row', gap: 16 }}>
+						<Pressable onPress={handleCopyShown} hitSlop={8}>
+							<Text color="text-link" variant="text-sm/semibold">
+								Copy
+							</Text>
+						</Pressable>
+						<Pressable onPress={handleShareShown} hitSlop={8}>
+							<Text color="text-link" variant="text-sm/semibold">
+								Share
+							</Text>
+						</Pressable>
+						<Pressable onPress={handleClear} hitSlop={8}>
+							<Text color="text-feedback-critical" variant="text-sm/semibold">
+								Clear
+							</Text>
+						</Pressable>
+					</View>
+				</View>
+				<ScrollView
+					nestedScrollEnabled
+					style={{ maxHeight: logHeight }}
+					contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 12 }}
+				>
+					{lines.map((entry, index) => (
+						<Pressable
+							key={`${entry.t}-${index}`}
+							onLongPress={() => {
+								try {
+									Clipboard.setString(formatEntry(entry))
+								} catch {
+									// Ignore.
+								}
+							}}
+							style={{ paddingVertical: 4 }}
+						>
+							<Text
+								color={colourFor(entry.lvl)}
+								variant="text-xs/normal"
+								style={{ fontFamily: 'monospace' }}
+							>
+								{formatEntry(entry)}
+							</Text>
+						</Pressable>
+					))}
+					{lines.length === 0 ? (
+						<Text
+							color="text-muted"
+							variant="text-sm/normal"
+							style={{ paddingVertical: 8 }}
+						>
+							Nothing here.
+						</Text>
+					) : total > SHOWN ? (
+						<Text
+							color="text-muted"
+							variant="text-sm/normal"
+							style={{ paddingVertical: 8 }}
+						>
+							{`Showing the newest ${SHOWN}. Share to get them all, or narrow it down.`}
+						</Text>
+					) : null}
+				</ScrollView>
+			</Card>
+
+			<Text color="text-muted" variant="text-xs/normal">
+				Long-press a line to copy it. Copy and Share above export everything
+				shown, with the plugin that wrote each line.
+			</Text>
 		</TabScreen>
 	)
 }
