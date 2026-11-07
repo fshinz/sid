@@ -5,7 +5,7 @@ import { getModules } from '@valenced/modules/finders'
 import { withName } from '@valenced/modules/finders/filters'
 import { instead } from '@valenced/patcher'
 import { React, ReactNative } from '@valenced/react'
-import { getHighlight, stopHighlight } from '../features/highlight'
+import { getHighlights, stopHighlight } from '../features/highlight'
 import {
 	inspectState,
 	markMenuClosed,
@@ -37,7 +37,7 @@ function truncate(s: string, n: number) {
 export function openMenu() {
 	const { AlertModal, AlertActionButton, Text } = Design
 	const last = inspectState.history[0]
-	const highlight = getHighlight()
+	const highlights = getHighlights()
 	const on = inspectState.enabled
 	const mode = inspectState.mode
 
@@ -86,11 +86,11 @@ export function openMenu() {
 								onPress: done(() => setInspecting(false)),
 							})
 						: null,
-					highlight
+					highlights.length
 						? h(AlertActionButton, {
-								text: 'Stop highlighting',
+								text: `Stop all highlights (${highlights.length})`,
 								variant: 'secondary',
-								onPress: done(stopHighlight),
+								onPress: done(() => stopHighlight()),
 							})
 						: null,
 					last

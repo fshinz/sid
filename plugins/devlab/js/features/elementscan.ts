@@ -207,14 +207,14 @@ export type NativeMark = {
 	borderStyle?: any
 }
 
-const TINT_COLOR = '#FF2D9A'
-const TINT_FILL = '#FF2D9A66'
+const TINT_ALPHA = '66'
 
 /**
- * Colors the element itself (translucent fill + border) so it is obvious
- * which element it is. The original styles are saved on the mark.
+ * Colors the element itself (translucent fill + border) in the given
+ * `#rrggbb` color so it is obvious which element it is. The original styles
+ * are saved on the mark.
  */
-export function markNative(fiber: Fiber): NativeMark | null {
+export function markNative(fiber: Fiber, color: string): NativeMark | null {
 	const instance = fiber?.stateNode
 	if (!instance || typeof instance.setNativeProps !== 'function') return null
 
@@ -236,9 +236,9 @@ export function markNative(fiber: Fiber): NativeMark | null {
 
 		instance.setNativeProps({
 			style: {
-				backgroundColor: TINT_FILL,
+				backgroundColor: `${color}${TINT_ALPHA}`,
 				borderWidth: 2,
-				borderColor: TINT_COLOR,
+				borderColor: color,
 				borderStyle: 'solid',
 			},
 		})
