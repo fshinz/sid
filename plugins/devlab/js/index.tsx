@@ -27,7 +27,6 @@ const SECTION = 'VALENCED'
 const SECTION_RETRY_MS = 20
 const SECTION_MAX_ATTEMPTS = 500
 
-// Each tool is its own screen so the system back gesture returns to the Tools tab.
 const toolItems: Record<string, settings.SettingsItem> = {}
 for (const { route, title, Screen } of TOOLS) {
 	toolItems[route] = {
@@ -41,7 +40,6 @@ for (const { route, title, Screen } of TOOLS) {
 
 const initialState: DevLabState = { enabled: true }
 
-// addSettingsItemToSection throws while the section doesn't exist yet.
 function sectionExists() {
 	try {
 		settings.addSettingsItemToSection(SECTION, items => items)()
@@ -63,19 +61,15 @@ export default plugin<{ jsonStorage: DevLabState }>({
 		bindStorage(jsonStorage)
 		setPluginApi(self)
 
-		// Live error log: console, Discord's logger, and uncaught errors.
 		beginSession()
 		cleanup(startErrorLog())
 		cleanup(markSessionClean)
 
-		// Errors other plugins report through the plugin API end up in the log too.
 		self.reportError = error =>
 			recordPluginError(error, 'Reported plugin error')
 
-		// Flux tracking is opt-in — the Flux tab turns it on.
 		cleanup(stopFluxLog)
 
-		// Color tokens, tap logging, and the floating pill overlay.
 		cleanup(findTokens())
 		cleanup(findJsxRuntime())
 		setInspectSaver(prefs => {
@@ -89,7 +83,6 @@ export default plugin<{ jsonStorage: DevLabState }>({
 			if (state.fluxEnabled) startFluxLog()
 		})
 
-		// DevLab also gets its own row in Discord settings :>
 		const undo: Array<() => void> = []
 		let stopped = false
 		let retryTimer: ReturnType<typeof setTimeout> | undefined
@@ -142,9 +135,7 @@ export default plugin<{ jsonStorage: DevLabState }>({
 			for (const remove of undo.splice(0)) {
 				try {
 					remove()
-				} catch {
-					// Already removed along with its section.
-				}
+				} catch {}
 			}
 			settings.refreshSettings()
 		})

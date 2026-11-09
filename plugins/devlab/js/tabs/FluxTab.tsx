@@ -85,7 +85,7 @@ export function FluxTab() {
 			>
 				<TableSwitchRow
 					label="Flux tracking"
-					subLabel="Records every dispatch while it is on. Off by default — leave it off unless you are debugging."
+					subLabel="Records every dispatch while on."
 					value={tracking}
 					onValueChange={handleToggleTracking}
 				/>

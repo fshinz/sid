@@ -13,7 +13,6 @@ export type LogEntry = {
 	msg: string
 	stack?: string
 	repeats?: number
-	/** Session id the entry was recorded in. */
 	sid?: string
 }
 
@@ -21,9 +20,7 @@ export type SessionMeta = {
 	id: string
 	startedAt: number
 	endedAt?: number
-	/** False until the plugin shuts down cleanly. */
 	clean: boolean
-	/** Set when a fatal error was recorded in this session. */
 	crashed: boolean
 }
 
@@ -36,7 +33,6 @@ const STACK_LINES = 12
 const REPEAT_WINDOW_MS = 5000
 const PERSIST_MS = 1500
 
-// Never keep raw credentials in the log.
 const REDACTIONS: Array<[RegExp, string]> = [
 	[/[\w-]{24,28}\.[\w-]{6}\.[\w-]{27,}/g, '[redacted]'],
 	[/mfa\.[\w-]{80,}/g, '[redacted]'],
@@ -55,8 +51,6 @@ export function redact(text: string): string {
 	return out
 }
 
-// Renders any logged value as short safe text: strings, errors, arrays,
-// objects, and React elements.
 function describe(value: unknown, depth: number, seen: Set<unknown>): string {
 	if (value === null) return 'null'
 	switch (typeof value) {
@@ -134,8 +128,6 @@ function format(args: unknown[]): { msg: string; stack?: string } {
 	}
 }
 
-// ── attribution: which plugin caused this? ──────────────────────────────────
-
 const PLUGIN_FRAME = /Valenced:Plugin:([^:)\s]+)/
 const PROXY_FRAME = /proxy trap/
 
@@ -185,8 +177,6 @@ function callSite(
 		: trimStack(`Logged from:\n${lines.slice(first).join('\n')}`)
 }
 
-// ── memory + listeners ──────────────────────────────────────────────────────
-
 const MAX_SESSIONS = 6
 
 const memory: LogEntry[] = []
@@ -218,22 +208,15 @@ export function currentSession(): SessionMeta {
 	return current
 }
 
-/** Entries of one session, newest last. */
 export function entriesFor(sid: string): LogEntry[] {
 	return memory.filter(entry => (entry.sid ?? '') === sid)
 }
 
-/**
- * Registers the fresh session created at plugin start. Call once, before
- * hydration — entries captured before storage loads then belong to this
- * session.
- */
 export function beginSession() {
 	if (!sessionList.includes(current)) sessionList.push(current)
 	trimSessions()
 }
 
-/** Marks the current session as ended cleanly (plugin shutdown). */
 export function markSessionClean() {
 	current.clean = true
 	current.endedAt = Date.now()
@@ -244,10 +227,6 @@ export function sessionEndedBadly(session: SessionMeta) {
 	return !session.clean
 }
 
-/**
- * Restores persisted sessions and entries, keeping anything already
- * captured in this run. Call right after beginSession.
- */
 export function hydrate(saved: {
 	logs?: LogEntry[]
 	sessions?: SessionMeta[]
@@ -266,7 +245,6 @@ export function hydrate(saved: {
 		sessionList.unshift(...oldSessions)
 	}
 
-	// Entries from before session tracking get their own bucket.
 	if (oldLogs.some(entry => !entry.sid)) {
 		sessionList.unshift({
 			id: '',
@@ -326,9 +304,7 @@ function notify() {
 	for (const listener of [...listeners]) {
 		try {
 			listener()
-		} catch {
-			// Ignore.
-		}
+		} catch {}
 	}
 }
 
@@ -345,7 +321,6 @@ function record(entry: LogEntry) {
 	if (memory.length > MEMORY_LIMIT)
 		memory.splice(0, memory.length - MEMORY_LIMIT)
 	if (entry.lvl === 'fatal') {
-		// Crashes must survive an app restart — persist immediately.
 		current.crashed = true
 		persistNow()
 	} else {
@@ -367,7 +342,6 @@ function capture(
 	try {
 		const { msg, stack } = format(args)
 
-		// Collapse identical messages into a repeat counter.
 		const last = memory[memory.length - 1]
 		const now = Date.now()
 		if (
@@ -395,18 +369,14 @@ function capture(
 			sid: current.id,
 		})
 	} catch {
-		// Never break the caller.
 	} finally {
 		inside = false
 	}
 }
 
-/** Records an error reported through the plugin API. */
 export function recordPluginError(error: unknown, tag?: string) {
 	capture('uncaught', 'error', [error], tag)
 }
-
-// ── hooks ───────────────────────────────────────────────────────────────────
 
 function wrap(
 	target: any,
@@ -449,7 +419,6 @@ export function startErrorLog(): () => void {
 		if (undo) unpatches.push(undo)
 	}
 
-	// Uncaught JS errors and fatal crashes.
 	const ErrorUtils = (globalThis as any).ErrorUtils
 	let restoreHandler: (() => void) | undefined
 	if (ErrorUtils?.getGlobalHandler && ErrorUtils?.setGlobalHandler) {
@@ -465,7 +434,6 @@ export function startErrorLog(): () => void {
 		}
 	}
 
-	// Unhandled promise rejections, where the runtime supports it.
 	const g = globalThis as any
 	if (
 		typeof g.onunhandledrejection === 'function' ||
@@ -484,7 +452,6 @@ export function startErrorLog(): () => void {
 		})
 	}
 
-	// Discord's own logger (Logger.prototype.*), tagged with the logger name.
 	const restores: Array<() => void> = []
 	const proto = (commonLogger as any)?.Logger?.prototype
 	if (proto) {
@@ -520,9 +487,6 @@ function loggerName(logger: any): string | undefined {
 	}
 }
 
-// ── formatting for the UI ───────────────────────────────────────────────────
-
-/** "Today 14:32" / "5 Nov 14:32" — checkup-style friendly time. */
 export function formatWhen(at: number): string {
 	const date = new Date(at)
 	const today = new Date()

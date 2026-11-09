@@ -71,7 +71,6 @@ export function readState(): DevLabState {
 	return normalizeState(storage?.use())
 }
 
-/** Waits for the async load, then reads — for restoring prefs at startup. */
 export async function readStateWhenLoaded(): Promise<DevLabState> {
 	await waitUntilLoaded()
 	return normalizeState(storage?.use())

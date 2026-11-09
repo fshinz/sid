@@ -4,7 +4,6 @@ import { normalizeColor } from './tokens'
 
 export type StyleColor = {
 	key: string
-	/** Normalized lowercase `#rrggbb` or `#rrggbbaa`, or null. */
 	normalized: string | null
 	value: unknown
 }
@@ -32,7 +31,6 @@ const STYLE_COLOR_KEYS = [
 	'overlayColor',
 ]
 
-// Subtrees that belong to DevLab's own UI are skipped while scanning.
 const skipRoots = new Set<Fiber>()
 let fiberRoot: any = null
 
@@ -40,7 +38,6 @@ export function registerSkipRoot(fiber: Fiber) {
 	skipRoots.add(fiber)
 }
 
-/** Registers the subtree of a mounted class instance as DevLab-internal UI. */
 export function registerSkipRootOf(instance: unknown) {
 	const fiber = fiberOf(instance)
 	if (fiber) {
@@ -70,7 +67,6 @@ function fiberOf(instance: unknown): Fiber | null {
 	return null
 }
 
-/** Remembers the React fiber root from any mounted class or host instance. */
 export function captureFromInstance(instance: unknown) {
 	const fiber = fiberOf(instance)
 	if (!fiber) return
@@ -92,7 +88,6 @@ function rootChild(): Fiber | null {
 	return fiberRoot.current?.child ?? fiberRoot.child ?? null
 }
 
-/** Yields every host (native view) fiber in the live tree, skipping DevLab's UI. */
 export function* walkHostFibers(): Generator<Fiber> {
 	const first = rootChild()
 	if (!first) return
@@ -123,7 +118,6 @@ export function nameOfFiber(fiber: Fiber): string | null {
 	return null
 }
 
-/** Nearest component names from the element outward, such as `['ChatInput', 'View']`. */
 export function componentChain(fiber: Fiber, limit = 8): string[] {
 	const names: string[] = []
 	let current = fiber
@@ -151,15 +145,12 @@ export function styleColors(fiber: Fiber): StyleColor[] {
 	let flat: any = props.style
 	try {
 		flat = ReactNative.StyleSheet.flatten(props.style) ?? flat
-	} catch {
-		// Keep the raw style value.
-	}
+	} catch {}
 
 	if (flat && typeof flat === 'object') {
 		for (const key of STYLE_COLOR_KEYS) push(key, flat[key])
 	}
 
-	// <Text color="#fff"> style props outside of styles.
 	if (typeof props.color === 'string' || typeof props.color === 'number') {
 		push('color', props.color)
 	}
@@ -175,10 +166,6 @@ const PROPS_COLOR_KEYS = [
 	'backgroundColor',
 ]
 
-/**
- * Normalized color values used by an element's props — allocation-light so
- * it is safe to run during element creation.
- */
 export function propsColorValues(props: any): string[] {
 	const out: string[] = []
 	const style = props.style
@@ -203,7 +190,6 @@ export function propsColorValues(props: any): string[] {
 	return out
 }
 
-/** Live elements whose style uses the given normalized color. */
 export function findElementsWithColor(
 	normalized: string,
 	limit = 120,
@@ -219,7 +205,6 @@ export function findElementsWithColor(
 	return out
 }
 
-/** Visible elements that use at least one color, for the element list. */
 export function scanColoredElements(limit = 200): {
 	fiber: Fiber
 	chain: string[]
@@ -245,11 +230,6 @@ export type NativeMark = {
 
 const TINT_ALPHA = '66'
 
-/**
- * Colors the element itself (translucent fill + border) in the given
- * `#rrggbb` color so it is obvious which element it is. The original styles
- * are saved on the mark.
- */
 export function markNative(fiber: Fiber, color: string): NativeMark | null {
 	const instance = fiber?.stateNode
 	if (!instance || typeof instance.setNativeProps !== 'function') return null
@@ -258,9 +238,7 @@ export function markNative(fiber: Fiber, color: string): NativeMark | null {
 		let flat: any = {}
 		try {
 			flat = ReactNative.StyleSheet.flatten(fiber.memoizedProps?.style) ?? {}
-		} catch {
-			// Use empty defaults.
-		}
+		} catch {}
 
 		const mark: NativeMark = {
 			instance,

@@ -11,7 +11,6 @@ type TokenModule = {
 
 let tokenModule: TokenModule | undefined
 
-/** Finds Discord's color token module. Returns an unsubscribe function. */
 export function findTokens() {
 	return getModules(withProps<any>('unsafe_rawColors', 'colors'), (m: any) => {
 		tokenModule = m?.default?.colors ? m.default : m
@@ -38,7 +37,6 @@ function hex(r: number, g: number, b: number, a: number) {
 	return `#${t(r)}${t(g)}${t(b)}${a === 255 ? '' : t(a)}`
 }
 
-/** Turns hex / rgb() / rgba() / ARGB ints into lowercase `#rrggbb` (or `#rrggbbaa`). */
 export function normalizeColor(v: unknown): string | undefined {
 	if (typeof v === 'number') {
 		return hex((v >>> 16) & 255, (v >>> 8) & 255, v & 255, (v >>> 24) & 255)
@@ -117,9 +115,7 @@ export function getMaps(): Maps {
 			semantic.set(name, value)
 			if (ref && typeof ref === 'object') refToName.set(ref, name)
 			bucket(value).semantic.push(name)
-		} catch {
-			// Skip tokens that fail to resolve.
-		}
+		} catch {}
 	}
 
 	const rawColors = tokenModule?.unsafe_rawColors ?? {}
@@ -129,9 +125,7 @@ export function getMaps(): Maps {
 			if (!value) continue
 			raw.set(name, value)
 			bucket(value).raw.push(name)
-		} catch {
-			// Skip.
-		}
+		} catch {}
 	}
 
 	cache = { theme, semantic, raw, refToName, byValue }
@@ -143,7 +137,6 @@ export type Analysis = {
 	value?: string
 	semantic?: string
 	raw?: string
-	/** True when the token name is known exactly, false when it is only a same-value match. */
 	exact: boolean
 	semanticMatches: string[]
 	rawMatches: string[]
@@ -172,7 +165,6 @@ export function analyzeColor(input: unknown): Analysis {
 		if (n) {
 			out.value = n
 		} else {
-			// e.g. Design <Text color="text-muted"> -> TEXT_MUTED
 			const candidate = input.trim().toUpperCase().replace(/-/g, '_')
 			if (maps.semantic.has(candidate)) {
 				out.semantic = candidate
@@ -201,7 +193,6 @@ export function analyzeColor(input: unknown): Analysis {
 	return out
 }
 
-/** Best name for a color: the exact token, then same-value matches. */
 export function tokenLabel(c: Analysis) {
 	if (c.semantic) return c.semantic
 	if (c.raw) return c.raw
@@ -224,7 +215,6 @@ export function rawEntries(): TokenEntry[] {
 		.sort((a, b) => a.name.localeCompare(b.name))
 }
 
-/** Every token name whose current value equals the given normalized color. */
 export function tokensForValue(value: string | null | undefined) {
 	if (!value) return { semantic: [], raw: [] }
 	const bucket = getMaps().byValue.get(value)

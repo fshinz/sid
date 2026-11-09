@@ -30,7 +30,6 @@ export function WatchTab() {
 	const [expandedId, setExpandedId] = React.useState<string | null>(null)
 	const [showPicker, setShowPicker] = React.useState(false)
 
-	// Re-read the store list each time the picker opens.
 	const allStores = React.useMemo(() => getAllStoreNames(), [showPicker])
 
 	React.useEffect(

@@ -8,14 +8,10 @@ import { addElementTransform } from './inspect'
 import type { NativeMark } from './elementscan'
 
 export type ActiveHighlight = {
-	/** Token name or element chain head — one highlight per id. */
 	id: string
 	label: string
-	/** Tint color, `#RRGGBB`. */
 	color: string
-	/** Normalized color being tinted. */
 	value: string
-	/** Component-name restriction for single-element highlights. */
 	only?: string
 	matched: number
 	marks: NativeMark[]
@@ -26,7 +22,6 @@ const listeners = new Set<() => void>()
 let transformOff: (() => void) | undefined
 let nudge: (() => void) | undefined
 
-/** Registered by the overlay so tint changes re-render the app root. */
 export function setHighlightNudge(fn: () => void) {
 	nudge = fn
 }
@@ -67,10 +62,6 @@ function nameOf(type: any): string | undefined {
 	}
 }
 
-/**
- * Tints elements at render time by overriding their style — this works on
- * every React Native architecture, unlike setNativeProps alone.
- */
 function tintTransform(type: any, props: any) {
 	if (!active.length || !props || typeof props !== 'object') return
 	const values = propsColorValues(props)
@@ -112,7 +103,6 @@ function tint(targets: { fiber: any }[], color: string) {
 	return marks
 }
 
-/** Removes one highlight by id (or all of them) and restores the elements. */
 export function stopHighlight(id?: string) {
 	const keep: ActiveHighlight[] = []
 	for (const item of active) {
@@ -125,10 +115,6 @@ export function stopHighlight(id?: string) {
 	notify()
 }
 
-/**
- * Colors every live element that uses the given normalized color, in the
- * chosen tint color. One highlight per id — picking again replaces it.
- */
 export function highlightColor(
 	id: string,
 	label: string,
@@ -155,13 +141,12 @@ export function highlightColor(
 		},
 	]
 	syncTransform()
-	// Re-render so the render-time tint lands on existing elements too.
+
 	nudge?.()
 	notify()
 	return elements.length
 }
 
-/** Colors one element by name, preferring the exact chain match. */
 export function highlightElement(
 	chain: string[],
 	value: string | null | undefined,

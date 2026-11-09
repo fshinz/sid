@@ -33,7 +33,6 @@ export const inspectState: InspectPrefs & {
 	mode: 'element',
 	copyOnTap: false,
 	showButton: true,
-	/** Taps are ignored until this timestamp (set while the floating menu is open). */
 	menuUntil: 0,
 	history: [],
 	status: {},
@@ -51,13 +50,10 @@ function emit() {
 	for (const fn of [...listeners]) {
 		try {
 			fn()
-		} catch {
-			// Ignore.
-		}
+		} catch {}
 	}
 }
 
-/** Re-renders DevLab screens without persisting anything. */
 export const notifyChange = emit
 
 const STYLE_KEYS = [
@@ -94,8 +90,6 @@ function typeName(type: any): string | undefined {
 	}
 }
 
-// Style objects are usually static (StyleSheet.create), so cache their color
-// entries by identity instead of flattening on every render.
 const styleEntriesCache = new WeakMap<object, [string, unknown][]>()
 
 function styleEntries(style: any): [string, unknown][] {
@@ -140,8 +134,6 @@ function readColors(props: any): [string, unknown][] {
 	return out
 }
 
-// ── tap handling ────────────────────────────────────────────────────────────
-
 type RawLayer = { name: string; entries: [string, unknown][]; hint?: string }
 let batch: RawLayer[] | null = null
 let reportId = 0
@@ -152,8 +144,7 @@ function onTap(name: string, entries: [string, unknown][], props: any) {
 	const hint = props.testID || props.nativeID || props.accessibilityLabel
 	if (!batch) {
 		batch = []
-		// Touch events bubble synchronously, so everything under the finger
-		// lands in one batch before the timeout flushes it.
+
 		setTimeout(flush, 0)
 	}
 	batch.push({
@@ -163,7 +154,6 @@ function onTap(name: string, entries: [string, unknown][], props: any) {
 	})
 }
 
-/** Drops the current tap. Called by the floating button so it never inspects itself. */
 export function suppressBatch() {
 	batch = null
 }
@@ -210,14 +200,10 @@ function flush() {
 		ToastActionCreators.open('shin.devlab.inspect', {
 			text: reportSummary(report),
 		})
-	} catch {
-		// Toast is best-effort.
-	}
+	} catch {}
 
 	emit()
 }
-
-// ── formatting ──────────────────────────────────────────────────────────────
 
 function propLabel(prop: string) {
 	const k = prop.replace('style.', '')
@@ -305,17 +291,10 @@ export function reportToText(r: Report, mode: InspectMode = inspectState.mode) {
 	return mode === 'token' ? tokenText(r) : elementText(r)
 }
 
-// ── patching ────────────────────────────────────────────────────────────────
-
 export type ElementTransform = (type: any, props: any) => any | undefined
 
 const transforms = new Set<ElementTransform>()
 
-/**
- * Registers a props transformer that runs for every element created while
- * at least one transform is registered — used for render-time highlight
- * tinting. Returns an unregister function.
- */
 export function addElementTransform(fn: ElementTransform) {
 	transforms.add(fn)
 	syncPatches()
@@ -333,9 +312,7 @@ function augment(type: any, props: any) {
 		try {
 			const next = fn(type, out)
 			if (next && next !== out) out = next
-		} catch {
-			// Never break rendering.
-		}
+		} catch {}
 	}
 
 	if (!inspectState.enabled) return out === props ? undefined : out
@@ -351,15 +328,12 @@ function augment(type: any, props: any) {
 		onTouchStart(e: any) {
 			try {
 				onTap(name, entries, props)
-			} catch {
-				// Never break the app's own touch handling.
-			}
+			} catch {}
 			return typeof prev === 'function' ? prev(e) : undefined
 		},
 	}
 }
 
-// Used for both createElement(type, props, ...children) and jsx(type, props, key).
 function rewrite(args: any) {
 	try {
 		const next = augment(args[0], args[1])
@@ -379,9 +353,7 @@ function patchModuleKeys(m: any) {
 		if (typeof m?.[key] !== 'function') continue
 		try {
 			unpatches.push(before(m, key, rewrite as any))
-		} catch {
-			// Namespace may be frozen.
-		}
+		} catch {}
 	}
 }
 
@@ -420,13 +392,10 @@ function uninstall() {
 	for (const u of unpatches.splice(0)) {
 		try {
 			u()
-		} catch {
-			// Ignore.
-		}
+		} catch {}
 	}
 }
 
-/** The element-creation patch stays up while inspecting OR tinting is active. */
 function syncPatches() {
 	const want = inspectState.enabled || transforms.size > 0
 	if (want && !patched) {
@@ -437,8 +406,6 @@ function syncPatches() {
 		uninstall()
 	}
 }
-
-// ── persistence ─────────────────────────────────────────────────────────────
 
 type PrefsSaver = (prefs: InspectPrefs) => void
 let prefsSaver: PrefsSaver | undefined
@@ -455,9 +422,7 @@ function persist() {
 			copyOnTap: inspectState.copyOnTap,
 			showButton: inspectState.showButton,
 		})
-	} catch {
-		// Ignore.
-	}
+	} catch {}
 }
 
 export function applyInspectPrefs(prefs: Partial<InspectPrefs> | undefined) {
@@ -478,8 +443,6 @@ export function applyInspectPrefs(prefs: Partial<InspectPrefs> | undefined) {
 	}
 }
 
-// ── controls ────────────────────────────────────────────────────────────────
-
 export function setInspecting(on: boolean) {
 	inspectState.enabled = on
 	syncPatches()
@@ -487,7 +450,6 @@ export function setInspecting(on: boolean) {
 	emit()
 }
 
-/** Picks how taps are reported and turns inspecting on. */
 export function startMode(mode: InspectMode) {
 	inspectState.mode = mode
 	if (!inspectState.enabled) setInspecting(true)

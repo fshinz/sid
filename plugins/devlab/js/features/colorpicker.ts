@@ -1,42 +1,52 @@
-import { ToastActionCreators } from '@valenced/discord/actions'
-import { Clipboard } from '@valenced/externals/react-native-clipboard'
+import { AlertActionCreators } from '@valenced/discord/actions'
+import { Design } from '@valenced/discord/design'
 import { lookupModule, lookupModules } from '@valenced/modules/finders'
 import { withName, withProps } from '@valenced/modules/finders/filters'
-import { ReactNative } from '@valenced/react'
+import { React, ReactNative } from '@valenced/react'
 
 type ShowPicker = (options: {
 	color: number
 	onSelect: (rgb: number) => void
 }) => void
 
+const CANDIDATE_NAMES = [
+	'showCustomColorPickerActionSheet',
+	'showColorPickerActionSheet',
+	'openColorPickerActionSheet',
+	'showCustomColorPicker',
+]
+
 let cached: ShowPicker | undefined
 
 function fromExports(exports: any): ShowPicker | undefined {
 	if (!exports) return
 	if (typeof exports === 'function') return exports
-	const fn = exports.showCustomColorPickerActionSheet ?? exports.default
-	return typeof fn === 'function' ? fn : undefined
+	for (const name of CANDIDATE_NAMES) {
+		const fn = exports[name]
+		if (typeof fn === 'function') return fn
+	}
+	const fallback = exports.default
+	return typeof fallback === 'function' ? fallback : undefined
 }
 
-function fromLookup(res: any): ShowPicker | undefined {
+function fromResult(res: any): ShowPicker | undefined {
 	if (!res) return
 	return fromExports(Array.isArray(res) ? res[0] : res)
 }
 
 function scan(matches: any): ShowPicker | undefined {
 	if (!matches) return
-	// lookupModules returns [exports, id] tuples; a single tuple when it's
-	// the plain lookupModule result.
-	const list = Array.isArray(matches[0]) ? matches : [matches]
-	for (const tuple of list) {
-		const fn = fromExports(Array.isArray(tuple) ? tuple[0] : tuple)
+	const list: any[] =
+		typeof matches[Symbol.iterator] === 'function' && !Array.isArray(matches)
+			? Array.from(matches)
+			: [matches]
+	for (const item of list) {
+		const fn = fromExports(Array.isArray(item) ? item[0] : item)
 		if (fn) return fn
 	}
 	return undefined
 }
 
-// Ported from the hex-color plugin's proven resolver: locate Discord's
-// color chooser via its dependency signature (survives minified names).
 function resolveViaRuntimeGlobal(): ShowPicker | undefined {
 	try {
 		const rev = (globalThis as any).valenced ?? (globalThis as any).revenge
@@ -44,81 +54,54 @@ function resolveViaRuntimeGlobal(): ShowPicker | undefined {
 		const filters = finders?.filters
 		if (!finders || !filters) return undefined
 
-		const actionSheetCreator = finders.lookupModule(
+		const creator = finders.lookupModule(
 			filters.withProps('openLazy', 'hideActionSheet'),
 		)
-		const actionSheetCreatorId = actionSheetCreator?.[1]
-		const actionSheetCreatorDep =
-			typeof actionSheetCreatorId === 'number' ? actionSheetCreatorId : null
+		const creatorId = creator?.[1]
+		const wd = filters.withDependencies
 
-		if (
-			actionSheetCreatorDep !== null &&
-			typeof filters.withDependencies === 'function'
-		) {
-			const wd = filters.withDependencies
+		if (typeof creatorId === 'number' && typeof wd === 'function') {
 			const loose = wd.loose ?? wd.partial ?? wd.unordered
-			const found = finders.lookupModule(
-				filters
-					.withName('showCustomColorPickerActionSheet')
-					.and(wd(loose([actionSheetCreatorDep, wd.relative(1)]))),
-				{ initialize: true },
-			)
-			const fn = fromLookup(found)
-			if (fn) return fn
+			if (typeof loose === 'function' && typeof wd.relative === 'function') {
+				const dep = loose([creatorId, wd.relative(1)])
+				for (const name of CANDIDATE_NAMES) {
+					const found = finders.lookupModule(
+						filters.withName(name).and(wd(dep)),
+						{ initialize: true },
+					)
+					const fn = fromResult(found)
+					if (fn) return fn
+				}
+			}
 		}
 
-		const res =
-			finders.lookupModule(
-				filters.withProps('showCustomColorPickerActionSheet'),
-				{
-					initialize: true,
-				},
-			) ??
-			finders.lookupModule(
-				filters.withName('showCustomColorPickerActionSheet'),
-				{
-					initialize: true,
-				},
-			)
-		return fromLookup(res)
-	} catch {
-		return undefined
-	}
+		for (const name of CANDIDATE_NAMES) {
+			const res =
+				finders.lookupModule(filters.withProps(name), { initialize: true }) ??
+				finders.lookupModule(filters.withName(name), { initialize: true })
+			const fn = fromResult(res)
+			if (fn) return fn
+		}
+	} catch {}
+	return undefined
 }
 
-/**
- * Finds Discord's own color chooser action sheet
- * (`showCustomColorPickerActionSheet`). Returns undefined when the client
- * doesn't expose it.
- */
 export function resolveShowCustomColorPicker(): ShowPicker | undefined {
 	if (cached) return cached
 
-	const tries: Array<() => ShowPicker | undefined> = [
-		// 1. Dependency-signature lookup, exactly like hex-color.
-		resolveViaRuntimeGlobal,
-		// 2. Name scan across all matching modules.
-		() =>
-			scan(
-				lookupModules(withName<any>('showCustomColorPickerActionSheet'), {
-					initialize: true,
-				}),
-			),
-		// 3. Export-prop scan (export keys survive minification).
-		() =>
-			scan(
-				lookupModules(withProps<any>('showCustomColorPickerActionSheet'), {
-					initialize: true,
-				}),
-			),
-		// 4. Single-module lookups as a last resort.
-		() =>
-			fromLookup(
-				lookupModule(withProps<any>('showCustomColorPickerActionSheet'), {
-					initialize: true,
-				}),
-			),
-	]
+	const tries: Array<() => ShowPicker | undefined> = [resolveViaRuntimeGlobal]
+
+	for (const name of CANDIDATE_NAMES) {
+		tries.push(() =>
+			scan(lookupModules(withName<any>(name), { initialize: true })),
+		)
+		tries.push(() =>
+			scan(lookupModules(withProps<any>(name), { initialize: true })),
+		)
+		tries.push(() =>
+			fromResult(lookupModule(withProps<any>(name), { initialize: true })),
+		)
+	}
 
 	for (const attempt of tries) {
 		try {
@@ -127,9 +110,7 @@ export function resolveShowCustomColorPicker(): ShowPicker | undefined {
 				cached = fn
 				return fn
 			}
-		} catch {
-			// Try the next lookup.
-		}
+		} catch {}
 	}
 	return undefined
 }
@@ -156,35 +137,74 @@ export function getLastPickedRgb() {
 }
 
 export type ColorPick = {
-	/** Starting color as `#rrggbb`. */
 	color: string
 	onSelect: (hex: string) => void
 }
 
-/**
- * Opens Discord's built-in color chooser. The chosen color comes back as
- * `#RRGGBB`. Falls back to copying the current value when the client
- * doesn't expose the chooser.
- */
+function openManualEntry(options: ColorPick) {
+	const { AlertModal, AlertActionButton, Text, TextInput } = Design
+	let value = options.color
+
+	const ModalInput = () => {
+		const [text, setText] = React.useState(options.color)
+		return React.createElement(TextInput, {
+			placeholder: '#RRGGBB',
+			value: text,
+			isClearable: true,
+			onChange: (next: string) => {
+				value = next.trim()
+				setText(next)
+			},
+		})
+	}
+
+	const submit = () => {
+		const hex = value.startsWith('#') ? value : `#${value}`
+		if (!/^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(hex)) return
+		options.onSelect(hex.toUpperCase())
+	}
+
+	AlertActionCreators.openAlert(
+		'shin.devlab-picker',
+		React.createElement(AlertModal, {
+			title: 'Tint color',
+			content: React.createElement(
+				React.Fragment,
+				null,
+				React.createElement(
+					Text,
+					{ variant: 'text-md/normal' },
+					'Enter a hex color, like #FF2D9A.',
+				),
+				React.createElement(ModalInput, null),
+			),
+			actions: React.createElement(
+				React.Fragment,
+				null,
+				React.createElement(AlertActionButton, {
+					text: 'Use color',
+					variant: 'primary',
+					onPress: submit,
+				}),
+				React.createElement(AlertActionButton, {
+					text: 'Cancel',
+					variant: 'secondary',
+				}),
+			),
+		}),
+	)
+}
+
 export function openDiscordColorPicker(options: ColorPick) {
 	try {
 		ReactNative.Keyboard?.dismiss?.()
-	} catch {
-		// Ignore.
-	}
+	} catch {}
 
 	const showPicker = resolveShowCustomColorPicker()
 	const initialRgb = hexToRgbInt(options.color, lastPickedRgb)
 
 	if (!showPicker) {
-		try {
-			Clipboard.setString(options.color)
-			ToastActionCreators.open('shin.devlab.picker', {
-				text: `Color chooser not available in this build — copied ${options.color} instead.`,
-			})
-		} catch {
-			// Ignore.
-		}
+		openManualEntry(options)
 		return
 	}
 

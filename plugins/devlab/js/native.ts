@@ -1,6 +1,5 @@
 import { callNativeMethod } from '@valenced/modules/native'
 
-// Some clients wrap native replies as { result } or { error }, others return the raw value.
 export async function native<T = unknown>(
 	name: string,
 	args: unknown[] = [],

@@ -24,7 +24,6 @@ function wrapperKind(value: any) {
 
 function looksLikeComponent(value: any) {
 	if (typeof value === 'function') {
-		// Component names start with an uppercase letter.
 		const first = value.name?.[0]
 		return (
 			!!first && first === first.toUpperCase() && first !== first.toLowerCase()
@@ -64,9 +63,7 @@ function scanComponents(filter: string) {
 					isForwardRef,
 				})
 			}
-		} catch {
-			// Skip modules whose exports throw on access.
-		}
+		} catch {}
 	}
 
 	return results

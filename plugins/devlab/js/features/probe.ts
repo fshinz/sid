@@ -21,7 +21,6 @@ const CANDIDATES = [
 	'LayerContainer',
 ]
 
-/** Reports which candidate component names exist as modules. Results land in the status map. */
 export function probeMounts() {
 	const found: string[] = []
 	inspectState.status.probe = 'running…'
@@ -49,9 +48,7 @@ export function probeMounts() {
 		for (const u of unsubs) {
 			try {
 				u()
-			} catch {
-				// Ignore.
-			}
+			} catch {}
 		}
 		if (!found.length) {
 			inspectState.status.probe = 'found: none of the candidates'
