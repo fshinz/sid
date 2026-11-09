@@ -10,6 +10,8 @@ pluginManagement {
 
 dependencyResolutionManagement {
     repositories {
+        // The Valenced API built from source (Valenced/valenced) lands here in CI.
+        mavenLocal()
         google()
         mavenCentral()
         // Xposed API (provided by the framework at runtime).
