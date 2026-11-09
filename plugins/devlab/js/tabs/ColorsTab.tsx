@@ -32,6 +32,7 @@ import { probeMounts } from '../features/probe'
 import {
 	analyzeColor,
 	currentTheme,
+	getMaps,
 	rawEntries,
 	semanticEntries,
 	tokenLabel,
@@ -87,7 +88,7 @@ function elementReport(element: { chain: string[]; colors: StyleColor[] }) {
 	return `Element: ${element.chain.join(' > ')}\n\n${element.colors
 		.map(color => {
 			const a = analyzeColor(color.value)
-			return `${color.key}: ${a.value ?? String(color.value)}\n  semantic: ${[a.semantic, ...a.semanticMatches].filter(Boolean).join(', ') || '—'}\n  raw: ${[a.raw, ...a.rawMatches].filter(Boolean).join(', ') || '—'}`
+			return `${color.key}: ${a.value ?? String(color.value)}\n  semantic: ${[a.semantic, ...a.semanticMatches].filter(Boolean).join(', ') || 'none'}\n  raw: ${[a.raw, ...a.rawMatches].filter(Boolean).join(', ') || 'none'}`
 		})
 		.join('\n')}`
 }
@@ -117,7 +118,10 @@ function TokenRow({
 							others.length > 0
 								? `Same value: ${others.slice(0, 6).join(', ')}${others.length > 6 ? ` +${others.length - 6}` : ''}`
 								: 'Unique value.',
-							'Tap Tint to color every element using this color, in a color you pick.',
+							getMaps().semantic.has(entry.name)
+								? `Theme: semantic.${currentTheme()} (per base).`
+								: 'Theme: raw map.',
+							'Tap Tint to pick a color.',
 						].join('\n')
 					: `${entry.value} · tap to tint`
 			}
@@ -164,7 +168,7 @@ export function ColorsTab() {
 	)
 	const [elements, setElements] = React.useState<ElementRow[]>([])
 	const [scanning, setScanning] = React.useState(false)
-	// Token and element lists render in pages so tab switching stays fast.
+
 	const [shown, setShown] = React.useState(PAGE)
 	const [elemShown, setElemShown] = React.useState(ELEMENT_PAGE)
 
@@ -181,9 +185,7 @@ export function ColorsTab() {
 	const toast = (text: string, variant?: 'success' | 'critical') => {
 		try {
 			ToastActionCreators.open(TOAST_KEY, { text, variant })
-		} catch {
-			// Ignore.
-		}
+		} catch {}
 	}
 
 	const handleTokenPress = (entry: TokenEntry) => {
@@ -196,7 +198,7 @@ export function ColorsTab() {
 					toast(`No visible elements use ${entry.name}.`)
 				} else {
 					toast(
-						`Tinting ${entry.name} in ${hex} — ${found} element${found === 1 ? '' : 's'} colored in place.`,
+						`Tinting ${entry.name} in ${hex}: ${found} element${found === 1 ? '' : 's'} colored in place.`,
 						'success',
 					)
 				}
@@ -242,7 +244,7 @@ export function ColorsTab() {
 			onSelect: hex => {
 				const found = highlightElement(element.chain, first.normalized, hex)
 				toast(
-					`Tinting ${id} in ${hex} — ${found} element${found === 1 ? '' : 's'} colored in place.`,
+					`Tinting ${id} in ${hex}: ${found} element${found === 1 ? '' : 's'} colored in place.`,
 					found > 0 ? 'success' : undefined,
 				)
 			},
@@ -270,11 +272,11 @@ export function ColorsTab() {
 		<TabScreen>
 			<TableRowGroup
 				title="Element inspector"
-				description="Turn on logging, then tap any element in the app to record its semantic and raw colors. The floating pill works from any screen."
+				description="Turn on logging, then tap elements to record their colors."
 			>
 				<TableSwitchRow
 					label="Inspect mode"
-					subLabel="Tap any element to log its colors. Elements rendered after turning this on are inspectable, so open a screen or switch channels afterwards."
+					subLabel="Tap elements to log their colors. Newly rendered elements only."
 					value={inspectState.enabled}
 					onValueChange={setInspecting}
 				/>
@@ -292,7 +294,7 @@ export function ColorsTab() {
 				/>
 				<TableRow
 					label="Element mode / Token mode"
-					subLabel="Element mode lists components and their colors. Token mode groups by color with every matching token name."
+					subLabel="Element mode lists components. Token mode groups by color token."
 					trailing={
 						<TableRow.TrailingText
 							text={inspectState.mode === 'token' ? 'Token' : 'Element'}
@@ -304,13 +306,13 @@ export function ColorsTab() {
 				/>
 				<TableRow
 					label="Refresh floating button"
-					subLabel="Forces the app root to re-render so the pill appears without a reload."
+					subLabel="Forces a root re-render so the pill appears."
 					arrow
 					onPress={handleRefreshPill}
 				/>
 				<TableRow
 					label="Probe mount points"
-					subLabel="Checks which known app components exist. Wait 4 seconds, then read Status."
+					subLabel="Checks known app components. Status updates after 4 seconds."
 					arrow
 					onPress={probeMounts}
 				/>
@@ -342,7 +344,7 @@ export function ColorsTab() {
 
 			<TableRowGroup
 				title="Theme colors"
-				description="Semantic and raw color tokens with their current values. Tap a token, pick a color in Discord's color chooser, and every element using that token is tinted your color — so CARD_MUTED_PRESSED_BG vs BACKGROUND_SURFACE_HIGHEST are instantly tellable apart."
+				description="Tap a token, pick a color, and every element using it is tinted."
 			>
 				<TableRow
 					label="Current theme"
@@ -432,7 +434,7 @@ export function ColorsTab() {
 			>
 				<TableRow
 					label={scanning ? 'Scanning…' : 'Scan visible UI'}
-					subLabel="Lists elements currently rendered, with the tokens behind their colors."
+					subLabel="Elements on screen and the tokens behind their colors."
 					arrow
 					onPress={handleScanElements}
 				/>
@@ -496,9 +498,7 @@ export function ColorsTab() {
 			)}
 
 			<Text variant="text-sm/normal" color="text-muted">
-				Tip: the DL pill can be dragged anywhere. Tap it for modes, copying,
-				stopping highlights, and to hide it. Highlight colors come from
-				Discord's own color chooser — tint each token its own color to compare.
+				Tip: drag the DL pill anywhere. Tap it for modes and to stop highlights.
 			</Text>
 		</TabScreen>
 	)

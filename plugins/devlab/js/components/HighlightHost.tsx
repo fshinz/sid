@@ -8,7 +8,6 @@ const ACCENT = '#FF2D9A'
 const INK = '#FFFFFF'
 const PANEL = 'rgba(17, 17, 17, 0.95)'
 
-/** Wraps DevLab's screens and overlay widgets so their UI is skipped while scanning. */
 export class DevLabMarker extends React.Component<{
 	children?: React.ReactNode
 }> {
@@ -27,7 +26,6 @@ export class DevLabMarker extends React.Component<{
 	}
 }
 
-/** Small status badge with the stop button while elements are tinted. */
 export function HighlightLayer() {
 	const [, rerender] = React.useReducer((count: number) => count + 1, 0)
 	const highlights = getHighlights()
@@ -41,7 +39,7 @@ export function HighlightLayer() {
 	return (
 		<View style={styles.badge} pointerEvents="box-none">
 			<Text style={styles.badgeText} numberOfLines={1}>
-				{`${labels} — ${total} element${total === 1 ? '' : 's'} tinted`}
+				{`${labels} · ${total} element${total === 1 ? '' : 's'} tinted`}
 			</Text>
 			<Pressable style={styles.badgeButton} onPress={() => stopHighlight()}>
 				<Text style={styles.buttonText}>Stop</Text>

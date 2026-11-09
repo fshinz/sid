@@ -46,7 +46,7 @@ export function openMenu() {
 	const mode = inspectState.mode
 
 	const status = on
-		? `Logging: ${mode === 'element' ? 'Element mode' : 'Token mode'}. Tap any element to log its semantic and raw colors.`
+		? `Logging: ${mode === 'element' ? 'Element mode' : 'Token mode'}. Tap an element to log its colors.`
 		: 'Logging is off. Pick a mode, then tap any element.'
 
 	const body = [
@@ -123,8 +123,6 @@ export function openMenu() {
 	}
 }
 
-// ── floating pill ───────────────────────────────────────────────────────────
-
 function FloatingButton() {
 	const { Dimensions, PanResponder, Pressable, View } = ReactNative
 	const { Text } = Design
@@ -135,7 +133,6 @@ function FloatingButton() {
 
 	React.useEffect(() => subscribe(rerender), [])
 
-	// Dragging moves the native view directly — no React re-render per frame.
 	const pan = React.useMemo(
 		() =>
 			PanResponder.create({
@@ -159,7 +156,6 @@ function FloatingButton() {
 
 	if (fabPos.x < 0) fabPos.x = Dimensions.get('window').width - SIZE - 12
 
-	// Grey = off, green = element mode, blue = token mode.
 	const color = !inspectState.enabled
 		? '#4e5058'
 		: inspectState.mode === 'token'
@@ -171,7 +167,7 @@ function FloatingButton() {
 		{
 			...pan.panHandlers,
 			ref: boxRef,
-			// Runs after the inner elements' handlers, so it can discard the tap on itself.
+
 			onTouchStart: suppressBatch,
 			style: {
 				position: 'absolute',
@@ -207,12 +203,9 @@ function FloatingButton() {
 	)
 }
 
-// Only one mount point draws the widgets, whichever renders first.
 let activeMount: string | undefined
 
-/** Floating pill + highlight badge. Renders from any mount point, once. */
 export function OverlayWidgets({ mount }: { mount: string }) {
-	// Subscribing here makes show/hide and menu state changes apply immediately.
 	const [, rerender] = React.useReducer((n: number) => n + 1, 0)
 	React.useEffect(() => subscribe(rerender), [])
 
@@ -227,19 +220,14 @@ export function OverlayWidgets({ mount }: { mount: string }) {
 	)
 }
 
-// ── mounting ────────────────────────────────────────────────────────────────
-
 const undo: (() => void)[] = []
 let rootInstance: any
 let rootAttached = false
 
-/** Forces the root to re-render so the pill shows up without a reload. */
 export function forceRootUpdate() {
 	try {
 		rootInstance?.forceUpdate?.()
-	} catch {
-		// Ignore.
-	}
+	} catch {}
 }
 
 function wrapOutput(ret: any, mount: string) {
@@ -274,8 +262,6 @@ function attachRoot() {
 								original: any,
 								self?: any,
 							) {
-								// `self` covers patcher variants that pass the instance as an
-								// argument instead of binding it as `this`.
 								const ctx = self ?? this
 								rootInstance = ctx
 								return wrapOutput(original.apply(ctx, args), 'root')
@@ -340,20 +326,16 @@ function attachToast() {
 export function attachOverlay(cleanup: (fn: () => void) => void) {
 	inspectState.status.overlay_root = 'waiting for AppContainer'
 
-	// Highlight tint changes re-render the root so they land everywhere.
 	setHighlightNudge(forceRootUpdate)
 	cleanup(() => setHighlightNudge(() => {}))
 
 	attachRoot()
 
-	// ToastContainer is only a fallback if the root can't be found.
 	const timer = setTimeout(() => {
 		if (!rootAttached) attachToast()
 	}, 3000)
 	undo.push(() => clearTimeout(timer))
 
-	// One nudge mounts the pill without a reload. Widgets react to their own
-	// state from here on, so repeated root re-renders are not needed.
 	const nudge = setTimeout(forceRootUpdate, 600)
 	undo.push(() => clearTimeout(nudge))
 
@@ -361,9 +343,7 @@ export function attachOverlay(cleanup: (fn: () => void) => void) {
 		for (const u of undo.splice(0)) {
 			try {
 				u()
-			} catch {
-				// Ignore.
-			}
+			} catch {}
 		}
 		activeMount = undefined
 		rootInstance = undefined

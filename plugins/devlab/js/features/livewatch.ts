@@ -19,7 +19,6 @@ export const MAX_LOG = 100
 const MAX_OBJECT_KEYS = 80
 const WATCH_INTERVAL = 1000
 
-// Cheap getters worth reading so changes show up even when the backing fields are private.
 const STATE_GETTERS = [
 	'getCurrentUserId',
 	'getChannelId',
@@ -107,7 +106,6 @@ function emit(storeName: string, snapshot: unknown) {
 	}
 }
 
-// The log outlives the screen, so reopening the tab shows earlier events.
 export function addWatchListener(listener: WatchLogListener) {
 	listeners.add(listener)
 	return () => {
@@ -129,7 +127,6 @@ export function watchStore(storeName: string) {
 
 	const initial = snapshotStore(storeName)
 
-	// Polling catches stores that don't expose change listeners.
 	const watch: Watch = {
 		lastSnapshot: safeJsonStringify(initial),
 		interval: setInterval(() => {
@@ -143,7 +140,6 @@ export function watchStore(storeName: string) {
 	watches.set(storeName, watch)
 
 	if (typeof store.addChangeListener === 'function') {
-		// A store-signalled change is logged even if the visible snapshot looks identical.
 		const onChange = () => {
 			const snapshot = snapshotStore(storeName)
 			watch.lastSnapshot = safeJsonStringify(snapshot)

@@ -90,7 +90,7 @@ function sessionLine(session: SessionMeta, entries: LogEntry[]) {
 	const ending = session.clean
 		? 'Ended normally'
 		: session.crashed
-			? 'Ended unexpectedly — crash recorded'
+			? 'Ended unexpectedly, crash recorded'
 			: 'Ended unexpectedly'
 	return [
 		ending,
@@ -120,8 +120,6 @@ export function ErrorsTab() {
 	const [query, setQuery] = React.useState('')
 	const [selected, setSelected] = React.useState<string | null>(null)
 
-	// Throttled live updates — bursts of log calls must not re-render
-	// per entry.
 	React.useEffect(() => {
 		let timer: ReturnType<typeof setTimeout> | undefined
 		const off = onEntries(() => {
@@ -173,9 +171,7 @@ export function ErrorsTab() {
 		const text = shownText()
 		try {
 			Clipboard.setString(text || 'Nothing to copy.')
-		} catch {
-			// Ignore.
-		}
+		} catch {}
 	}
 
 	const handleShareShown = () => {
@@ -183,9 +179,7 @@ export function ErrorsTab() {
 		if (!text) return
 		try {
 			void Share.share({ message: text })
-		} catch {
-			// Ignore.
-		}
+		} catch {}
 	}
 
 	const handleClear = () => {
@@ -220,7 +214,7 @@ export function ErrorsTab() {
 
 			<TableRowGroup
 				title="Sessions"
-				description="Kept across restarts, so crashes and errors survive an app restart. Tap to view a session's log."
+				description="Kept across restarts. Tap to view a session."
 			>
 				<TableRow
 					icon={rowIcon('ClockIcon', 'CircleInformationIcon')}
@@ -369,9 +363,7 @@ export function ErrorsTab() {
 							onLongPress={() => {
 								try {
 									Clipboard.setString(formatEntry(entry))
-								} catch {
-									// Ignore.
-								}
+								} catch {}
 							}}
 							style={{ paddingVertical: 4 }}
 						>

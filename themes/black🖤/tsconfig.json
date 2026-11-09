@@ -1,3 +1,6 @@
 {
-	"extends": "../../tsconfig.base.json"
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"types": ["@valenced/types", "@valenced/themes-api"]
+	}
 }

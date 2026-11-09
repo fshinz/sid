@@ -31,7 +31,7 @@ export function DevLabSettings() {
 	return (
 		<DevLabMarker>
 			<View style={{ flex: 1 }}>
-				{/* SegmentedControl is a ScrollView, which grows by default and would fill the column. */}
+				{}
 				<View
 					style={{
 						flexGrow: 0,
@@ -44,7 +44,7 @@ export function DevLabSettings() {
 				</View>
 				<SegmentedControlPages state={state} style={{ flex: 1 }} />
 			</View>
-			{/* Fallback mount when the app-root overlay didn't attach. */}
+			{}
 			<OverlayWidgets mount="devlab" />
 		</DevLabMarker>
 	)

@@ -29,9 +29,7 @@ function searchModules(query: string) {
 			) {
 				results.push({ id, keys, exports })
 			}
-		} catch {
-			// Exotic exports can throw on key access.
-		}
+		} catch {}
 	}
 
 	return results

@@ -29,7 +29,6 @@ const KNOWN_API: Record<string, string[]> = {
 	'@valenced/externals/react-native-clipboard': ['Clipboard'],
 }
 
-// Only understands ranges like ">=1 <2", which is all valenced.api uses.
 function satisfiesMajor(version: string, range: string) {
 	const major = Number(version.split('.')[0]) || 0
 	const min = Number(range.match(/>=(\d+)/)?.[1] ?? 0)
@@ -41,9 +40,7 @@ async function loadPlugins(): Promise<any[]> {
 	let plugins: unknown = []
 	try {
 		plugins = await getInstalledPlugins()
-	} catch {
-		// Fall through to the global registry below.
-	}
+	} catch {}
 	if (Array.isArray(plugins) && plugins.length > 0) return plugins
 
 	const registry = (globalThis as any).__valenced?.plugins

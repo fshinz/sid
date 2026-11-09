@@ -6,7 +6,6 @@ const anyModule = createFilterGenerator<[]>(
 	() => 'devlab.any-module',
 )
 
-// Only already-initialized modules, so scanning never side-loads anything.
 export function getModuleEntries(): [string, any][] {
 	const entries: [string, any][] = []
 	for (const [exports, id] of lookupModules(anyModule(), {

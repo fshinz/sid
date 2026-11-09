@@ -97,7 +97,6 @@ export function serializeFluxEntry(entry: FluxLogEntry) {
 export function startFluxLog() {
 	if (unpatch) return
 
-	// The patch must return the payload untouched, otherwise the dispatch is blocked.
 	unpatch = onAnyFluxEventDispatched(payload => {
 		if (paused) return payload
 

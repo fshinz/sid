@@ -1,10 +1,3 @@
-/**
- * Obsidian Black — a pure black Discord theme.
- * Deep black surfaces, charcoal contrast, and neutral white accents.
- */
-
-/// <reference types="@valenced/themes-api" />
-
 export default plugin({
 	start({ themes }) {
 		themes.registerGroup('black-theme', {
@@ -100,7 +93,6 @@ export default plugin({
 		}
 
 		const raw = {
-			// Brand and focus
 			BLUE_NEW_27: '#D4D4D4',
 			BLUE_NEW_37: '#D4D4D4',
 			BLURPLE_14: '#D4D4D4',
@@ -112,7 +104,6 @@ export default plugin({
 			BRAND_500: '#BDBDBD',
 			FOCUS_PRIMARY: '#A0A0A0',
 
-			// Preserve readable status colors
 			GREEN_0: '#19734D',
 			GREEN_260: '#95CCB0',
 			GREEN_300: '#8CC6A8',
@@ -134,7 +125,6 @@ export default plugin({
 			RED_NEW_45: '#DA373C',
 			RED_NEW_50: '#F04747',
 
-			// Neutral palette
 			NEUTRAL_1: '#FFFFFF',
 			NEUTRAL_2: '#F5F5F5',
 			NEUTRAL_5: '#EAEAEA',
@@ -153,7 +143,6 @@ export default plugin({
 			NEUTRAL_96: '#000000',
 			NEUTRAL_100: '#000000',
 
-			// White opacity levels
 			OPACITY_1: '#FFFFFF05',
 			OPACITY_4: '#FFFFFF0A',
 			OPACITY_8: '#FFFFFF14',
@@ -180,7 +169,6 @@ export default plugin({
 			OPACITY_92: '#FFFFFFEB',
 			OPACITY_96: '#FFFFFFF5',
 
-			// Black opacity levels
 			OPACITY_BLACK_1: '#00000005',
 			OPACITY_BLACK_4: '#0000000A',
 			OPACITY_BLACK_8: '#00000014',
@@ -207,7 +195,6 @@ export default plugin({
 			OPACITY_BLACK_92: '#000000EB',
 			OPACITY_BLACK_96: '#000000F5',
 
-			// Discord white tokens
 			WHITE: '#FFFFFF',
 			WHITE_500: '#FFFFFF',
 		}

@@ -5,7 +5,6 @@ type SearchFieldProps = Pick<
 	'value' | 'onChange' | 'placeholder'
 >
 
-// TextInputProps doesn't declare these, but the input forwards them to the native field.
 const nativeProps = { autoCapitalize: 'none', autoCorrect: false }
 
 export function SearchField(props: SearchFieldProps) {

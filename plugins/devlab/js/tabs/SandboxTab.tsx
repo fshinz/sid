@@ -48,12 +48,10 @@ const QUICK_ACTIONS = [
 	},
 ]
 
-// Lets snippets use top-level await.
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (
 	...args: string[]
 ) => (...args: any[]) => Promise<any>
 
-// History is module-level so it survives leaving the DevLab screen.
 let history: HistoryEntry[] = []
 let nextHistoryId = 0
 const historyListeners = new Set<HistoryListener>()
@@ -71,7 +69,6 @@ function addToHistory(code: string, result: string, ok: boolean) {
 export function SandboxTab() {
 	const { ScrollView } = ReactNative
 
-	// The ref keeps Run reading the latest text even when pressed mid-edit.
 	const codeRef = React.useRef('')
 	const [code, setCode] = React.useState('')
 	const [result, setResult] = React.useState('')
