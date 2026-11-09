@@ -1,9 +1,7 @@
-import { ToastActionCreators } from '@valenced/discord/actions'
 import { Design } from '@valenced/discord/design'
 import { Clipboard } from '@valenced/externals/react-native-clipboard'
 import { React, ReactNative } from '@valenced/react'
 import { openColorsBrowser } from '../components/ColorsBrowser'
-import { forceRootUpdate } from '../components/FloatingPill'
 import { TabScreen } from '../components/TabScreen'
 import { getHighlights, stopHighlight } from '../features/highlight'
 import {
@@ -14,10 +12,8 @@ import {
 	setCopyOnTap,
 	setInspecting,
 	setShowButton,
-	startMode,
 	subscribe,
 } from '../features/inspect'
-import { probeMounts } from '../features/probe'
 import {
 	currentTheme,
 	rawEntries,
@@ -28,8 +24,6 @@ import type { Report } from '../features/inspect'
 
 const { Button, TableRow, TableRowGroup, TableSwitchRow, Text } = Design
 const { View } = ReactNative
-
-const TOAST_KEY = 'shin.devlab.colors'
 
 function Swatch({ value }: { value?: string }) {
 	return (
@@ -79,26 +73,11 @@ export function ColorsTab() {
 	React.useEffect(() => subscribe(rerender), [])
 
 	const highlights = getHighlights()
-	const status = Object.entries(inspectState.status)
-		.filter(([, v]) => v)
-		.map(([k, v]) => `${k}: ${v}`)
-		.join('\n')
-
-	const toast = (text: string, variant?: 'success' | 'critical') => {
-		try {
-			ToastActionCreators.open(TOAST_KEY, { text, variant })
-		} catch {}
-	}
 
 	const handleReportPress = (report: Report) => {
 		if (expandedReport !== report.id) return setExpandedReport(report.id)
 		Clipboard.setString(reportToText(report, 'token'))
 		setExpandedReport(null)
-	}
-
-	const handleRefreshPill = () => {
-		forceRootUpdate()
-		toast('Refreshing the floating button…')
 	}
 
 	return (
@@ -124,35 +103,6 @@ export function ColorsTab() {
 					subLabel="Show the draggable DL pill for quick access from any screen."
 					value={inspectState.showButton}
 					onValueChange={setShowButton}
-				/>
-				<TableRow
-					label="Element mode / Token mode"
-					subLabel="Element mode lists components. Token mode groups by color token."
-					trailing={
-						<TableRow.TrailingText
-							text={inspectState.mode === 'token' ? 'Token' : 'Element'}
-						/>
-					}
-					onPress={() =>
-						startMode(inspectState.mode === 'token' ? 'element' : 'token')
-					}
-				/>
-				<TableRow
-					label="Refresh floating button"
-					subLabel="Forces a root re-render so the pill appears."
-					arrow
-					onPress={handleRefreshPill}
-				/>
-				<TableRow
-					label="Probe mount points"
-					subLabel="Checks known app components. Status updates after 4 seconds."
-					arrow
-					onPress={probeMounts}
-				/>
-				<TableRow
-					label="Status"
-					subLabel={status || 'No status yet.'}
-					subLabelLineClamp={10}
 				/>
 			</TableRowGroup>
 

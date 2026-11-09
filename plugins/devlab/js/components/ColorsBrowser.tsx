@@ -34,7 +34,7 @@ const {
 	TableRowGroup,
 	useSegmentedControlState,
 } = Design
-const { View } = ReactNative
+const { ScrollView, View, useWindowDimensions } = ReactNative
 
 const SHEET_KEY = 'shin.devlab.colors-browser'
 const TOAST_KEY = 'shin.devlab.colors'
@@ -172,7 +172,11 @@ function TokenPage({ kind }: { kind: 'semantic' | 'raw' }) {
 	}
 
 	return (
-		<View>
+		<ScrollView
+			nestedScrollEnabled
+			keyboardShouldPersistTaps="handled"
+			contentContainerStyle={{ paddingBottom: 24 }}
+		>
 			<SearchField
 				value={filter}
 				onChange={setFilter}
@@ -206,7 +210,7 @@ function TokenPage({ kind }: { kind: 'semantic' | 'raw' }) {
 					/>
 				)}
 			</TableRowGroup>
-		</View>
+		</ScrollView>
 	)
 }
 
@@ -259,7 +263,11 @@ function ElementsPage() {
 	}
 
 	return (
-		<View>
+		<ScrollView
+			nestedScrollEnabled
+			keyboardShouldPersistTaps="handled"
+			contentContainerStyle={{ paddingBottom: 24 }}
+		>
 			<SearchField
 				value={filter}
 				onChange={setFilter}
@@ -332,12 +340,13 @@ function ElementsPage() {
 					)}
 				</TableRowGroup>
 			)}
-		</View>
+		</ScrollView>
 	)
 }
 
 function ColorsBrowserSheet({ initial = 0 }: { initial?: number }) {
 	const [pageWidth, setPageWidth] = React.useState(0)
+	const sheetMax = Math.round(useWindowDimensions().height * 0.85)
 
 	const items = React.useMemo(
 		() => [
@@ -370,7 +379,7 @@ function ColorsBrowserSheet({ initial = 0 }: { initial?: number }) {
 	})
 
 	return (
-		<ActionSheet scrollable>
+		<ActionSheet scrollable maxHeight={sheetMax}>
 			<BottomSheetTitleHeader title="Color browser" />
 			<View
 				style={{ flex: 1, gap: 20, paddingTop: 8 }}

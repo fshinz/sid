@@ -3,7 +3,6 @@ import * as settings from '@valenced/discord/modules/settings'
 import { lookupGeneratedIconComponent } from '@valenced/utils/discord'
 import { setPluginApi } from './api'
 import { attachOverlay } from './components/FloatingPill'
-import { registerPluginsCommand } from './features/diagcommands'
 import { startIconCache } from './features/diagicons'
 import { setExportToast } from './features/diagreport'
 import {
@@ -80,12 +79,6 @@ export default plugin<{ jsonStorage: DevLabState }>({
 				})
 			} catch {}
 		})
-
-		try {
-			cleanup(registerPluginsCommand())
-		} catch (error) {
-			recordPluginError(error, 'Failed to register /plugins')
-		}
 
 		cleanup(stopFluxLog)
 

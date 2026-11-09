@@ -56,7 +56,7 @@ function normalizeInspect(value: unknown): InspectPrefs | undefined {
 		enabled: raw.enabled === true,
 		mode: raw.mode === 'token' ? 'token' : 'element',
 		copyOnTap: raw.copyOnTap === true,
-		showButton: raw.showButton !== false,
+		showButton: raw.showButton === true,
 	}
 }
 

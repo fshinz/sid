@@ -32,7 +32,7 @@ export const inspectState: InspectPrefs & {
 	enabled: false,
 	mode: 'element',
 	copyOnTap: false,
-	showButton: true,
+	showButton: false,
 	menuUntil: 0,
 	history: [],
 	status: {},
