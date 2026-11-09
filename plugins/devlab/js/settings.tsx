@@ -4,6 +4,7 @@ import { OverlayWidgets } from './components/FloatingPill'
 import { DevLabMarker } from './components/HighlightHost'
 import { ColorsTab } from './tabs/ColorsTab'
 import { ComponentTab } from './tabs/ComponentTab'
+import { DiagnosticsTab } from './tabs/DiagnosticsTab'
 import { ErrorsTab } from './tabs/ErrorsTab'
 import { MetroTab } from './tabs/MetroTab'
 import { ToolsTab } from './tabs/ToolsTab'
@@ -14,6 +15,7 @@ const TABS = [
 	{ id: 'colors', label: 'Colors', Tab: ColorsTab },
 	{ id: 'components', label: 'Components', Tab: ComponentTab },
 	{ id: 'errors', label: 'Errors', Tab: ErrorsTab },
+	{ id: 'diagnostics', label: 'Diagnostics', Tab: DiagnosticsTab },
 ]
 
 export function DevLabSettings() {
