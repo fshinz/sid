@@ -46,11 +46,20 @@ jobs:
         id: plan
         run: .github/scripts/plan-releases.sh
 
+      - uses: actions/checkout@v4
+        if: steps.plan.outputs.count != '0'
+        with:
+          repository: Valenced/valenced
+          path: valenced-src
+
+      - name: Build the Valenced API from its public source
+        if: steps.plan.outputs.count != '0'
+        working-directory: valenced-src
+        run: ./gradlew :core:publishToMavenLocal :android:api:publishToMavenLocal -x test --no-daemon
+
       - name: Build plugins
         if: steps.plan.outputs.count != '0'
         run: ./gradlew --no-daemon packageAllPlugins
-        env:
-          GITHUB_TOKEN: ${{ secrets.READ_PACKAGES_TOKEN }} # For Gradle to download the API dependency.
 
       - name: Publish to the pool
         if: steps.plan.outputs.count != '0'
