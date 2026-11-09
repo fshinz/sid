@@ -1,4 +1,5 @@
 import * as commonLogger from '@valenced/discord/common/logger'
+import * as modulesNative from '@valenced/modules/native'
 import { saveLogs } from '../storage'
 
 export type Level = 'debug' | 'log' | 'info' | 'warn' | 'error' | 'fatal'
@@ -24,6 +25,43 @@ export type SessionMeta = {
 	crashed: boolean
 }
 
+export type ExitInfo = {
+	pid: number
+	timestamp: number
+	reason: number
+	reasonText: string
+	description: string | null
+	status: number
+	importance: number
+	processName: string | null
+	pssKb: number
+	rssKb: number
+	hasTrace: boolean
+}
+
+export type SessionInfo = {
+	id: string
+	startedAt: number
+	pid: number
+	current: boolean
+	jsBytes: number
+	logcatBytes: number
+	crash: boolean
+	exit: ExitInfo | null
+}
+
+export type NativeLogStatus = {
+	session: string
+	logcatRunning: boolean
+	logcatEnabled: boolean
+	logcatLevel: string
+	maxSessions?: number
+	logcatLines: number
+	logcatError: string | null
+	exitReasonsAvailable: boolean
+	sdk: number
+}
+
 export const OWN_ID = 'shin.dev-lab'
 const DEV_KIT_ID = 'valenced.developer-kit'
 
@@ -32,6 +70,8 @@ const MESSAGE_LIMIT = 4000
 const STACK_LINES = 12
 const REPEAT_WINDOW_MS = 5000
 const PERSIST_MS = 1500
+const FLUSH_MS = 2000
+const BATCH_LIMIT = 250
 
 const REDACTIONS: Array<[RegExp, string]> = [
 	[/[\w-]{24,28}\.[\w-]{6}\.[\w-]{27,}/g, '[redacted]'],
@@ -316,10 +356,104 @@ function schedulePersist() {
 	}, PERSIST_MS)
 }
 
+function nativeCall<T = any>(method: string, args: unknown[] = []): Promise<T> {
+	const call = (modulesNative as any)?.callNativeMethod
+	if (typeof call !== 'function')
+		return Promise.reject(new Error('callNativeMethod is not available'))
+	return Promise.resolve(call(`${OWN_ID}.logs.${method}`, args))
+}
+
+export function parseEntries(text: string | null | undefined): LogEntry[] {
+	if (!text) return []
+	const out: LogEntry[] = []
+	for (const line of text.split('\n')) {
+		if (!line) continue
+		try {
+			out.push(JSON.parse(line))
+		} catch {}
+	}
+	return out
+}
+
+export function exitWentWrong(exit: ExitInfo | null | undefined): boolean {
+	return !!exit && [4, 5, 6, 7, 9].includes(exit.reason)
+}
+
+export function formatBytes(bytes: number): string {
+	if (bytes < 1024) return `${bytes} B`
+	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+export type NativeLogs = {
+	sessions: SessionInfo[] | undefined
+	status: NativeLogStatus | undefined
+	problem: string | undefined
+}
+
+export async function loadNativeLogs(): Promise<NativeLogs> {
+	try {
+		const [list, state] = await Promise.all([
+			nativeCall<SessionInfo[]>('sessions'),
+			nativeCall<NativeLogStatus>('status'),
+		])
+		return {
+			sessions: Array.isArray(list) ? list : [],
+			status: state,
+			problem: undefined,
+		}
+	} catch (error) {
+		return {
+			sessions: undefined,
+			status: undefined,
+			problem: `The native half is not answering (${String(error)}). This session's plugin logs are still kept.`,
+		}
+	}
+}
+
+export async function readNativeLog(
+	id: string,
+	which: 'js' | 'logcat' | 'crash',
+	max: number,
+) {
+	return nativeCall<string | null>('read', [id, which, max])
+}
+
+let pending: string[] = []
+let flushTimer: ReturnType<typeof setTimeout> | undefined
+let nativeOk = true
+
+function flush(urgent = false) {
+	if (flushTimer) {
+		clearTimeout(flushTimer)
+		flushTimer = undefined
+	}
+	if (!pending.length || !nativeOk) return
+	const batch = pending
+	pending = []
+	nativeCall('append', [batch, urgent]).catch(() => {
+		nativeOk = false
+	})
+}
+
+function scheduleFlush() {
+	if (!flushTimer) flushTimer = setTimeout(() => flush(), FLUSH_MS)
+}
+
 function record(entry: LogEntry) {
 	memory.push(entry)
 	if (memory.length > MEMORY_LIMIT)
 		memory.splice(0, memory.length - MEMORY_LIMIT)
+	if (nativeOk) {
+		pending.push(JSON.stringify(entry))
+		if (
+			entry.lvl === 'error' ||
+			entry.lvl === 'fatal' ||
+			pending.length >= BATCH_LIMIT
+		)
+			flush(entry.lvl === 'fatal')
+		else scheduleFlush()
+	}
 	if (entry.lvl === 'fatal') {
 		current.crashed = true
 		persistNow()
@@ -425,6 +559,7 @@ export function startErrorLog(): () => void {
 		const previous = ErrorUtils.getGlobalHandler()
 		const handler = (error: unknown, isFatal?: boolean) => {
 			capture('uncaught', isFatal ? 'fatal' : 'error', [error])
+			flush(true)
 			return previous?.(error, isFatal)
 		}
 		ErrorUtils.setGlobalHandler(handler)
@@ -475,6 +610,7 @@ export function startErrorLog(): () => void {
 		for (const unpatch of unpatches) unpatch()
 		for (const restore of restores) restore()
 		restoreHandler?.()
+		flush()
 	}
 }
 
