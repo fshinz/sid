@@ -1,7 +1,11 @@
+import { ToastActionCreators } from '@valenced/discord/actions'
 import * as settings from '@valenced/discord/modules/settings'
 import { lookupGeneratedIconComponent } from '@valenced/utils/discord'
 import { setPluginApi } from './api'
 import { attachOverlay } from './components/FloatingPill'
+import { registerPluginsCommand } from './features/diagcommands'
+import { startIconCache } from './features/diagicons'
+import { setExportToast } from './features/diagreport'
 import {
 	beginSession,
 	hydrate,
@@ -68,6 +72,21 @@ export default plugin<{ jsonStorage: DevLabState }>({
 		self.reportError = error =>
 			recordPluginError(error, 'Reported plugin error')
 
+		setExportToast((text, critical) => {
+			try {
+				ToastActionCreators.open('shin.devlab.errors', {
+					text,
+					variant: critical ? 'critical' : 'success',
+				})
+			} catch {}
+		})
+
+		try {
+			cleanup(registerPluginsCommand())
+		} catch (error) {
+			recordPluginError(error, 'Failed to register /plugins')
+		}
+
 		cleanup(stopFluxLog)
 
 		cleanup(findTokens())
@@ -81,6 +100,11 @@ export default plugin<{ jsonStorage: DevLabState }>({
 			hydrate({ logs: state.logs, sessions: state.sessions })
 			applyInspectPrefs(state.inspect)
 			if (state.fluxEnabled) startFluxLog()
+			try {
+				startIconCache(state.iconCache)
+			} catch (error) {
+				recordPluginError(error, 'Icon cache check failed')
+			}
 		})
 
 		const undo: Array<() => void> = []

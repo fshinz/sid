@@ -7,7 +7,7 @@
 	"contributors": [
 		"k1ng_op <641266820187160576> (https://github.com/k1ng0p \"GitHub\")"
 	],
-	"version": "1.7.1",
+	"version": "1.8.0",
 	"icon": "WrenchIcon",
 
 	"dependencies": {
@@ -20,6 +20,10 @@
 	},
 
 	"dist": {
-		"script": "index.js"
+		"script": "index.js",
+		"android": {
+			"path": "plugin.jar",
+			"class": "com.shin.devlab.DevLab"
+		}
 	}
 }

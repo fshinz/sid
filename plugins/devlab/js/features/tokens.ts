@@ -29,6 +29,16 @@ export function currentTheme(): string {
 	}
 }
 
+export function definitionOf(name: string): string | undefined {
+	const defs = (tokenModule?.colors as any)?.semantic?.[name]
+	if (!defs || typeof defs !== 'object') return undefined
+	const parts = Object.entries(defs).map(([base, def]: [string, any]) => {
+		const source = def?.raw ?? (typeof def === 'string' ? def : '?')
+		return `${base} → ${source}`
+	})
+	return parts.length ? parts.join(', ') : undefined
+}
+
 function hex(r: number, g: number, b: number, a: number) {
 	const t = (n: number) =>
 		Math.max(0, Math.min(255, Math.round(n)))

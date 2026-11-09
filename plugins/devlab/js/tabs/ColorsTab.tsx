@@ -2,21 +2,10 @@ import { ToastActionCreators } from '@valenced/discord/actions'
 import { Design } from '@valenced/discord/design'
 import { Clipboard } from '@valenced/externals/react-native-clipboard'
 import { React, ReactNative } from '@valenced/react'
+import { openColorsBrowser } from '../components/ColorsBrowser'
 import { forceRootUpdate } from '../components/FloatingPill'
-import { SearchField } from '../components/SearchField'
 import { TabScreen } from '../components/TabScreen'
-import {
-	getLastPickedRgb,
-	openDiscordColorPicker,
-	rgbIntToHex,
-} from '../features/colorpicker'
-import { hasFiberRoot, scanColoredElements } from '../features/elementscan'
-import {
-	getHighlights,
-	highlightColor,
-	highlightElement,
-	stopHighlight,
-} from '../features/highlight'
+import { getHighlights, stopHighlight } from '../features/highlight'
 import {
 	clearHistory,
 	inspectState,
@@ -30,28 +19,17 @@ import {
 } from '../features/inspect'
 import { probeMounts } from '../features/probe'
 import {
-	analyzeColor,
 	currentTheme,
-	getMaps,
 	rawEntries,
 	semanticEntries,
-	tokenLabel,
 	tokensAvailable,
-	tokensForValue,
 } from '../features/tokens'
-import type { ElementInfo, StyleColor } from '../features/elementscan'
 import type { Report } from '../features/inspect'
-import type { TokenEntry } from '../features/tokens'
 
 const { Button, TableRow, TableRowGroup, TableSwitchRow, Text } = Design
 const { View } = ReactNative
 
-const MAX_ELEMENT_ROWS = 80
-const PAGE = 30
-const ELEMENT_PAGE = 20
 const TOAST_KEY = 'shin.devlab.colors'
-
-type ElementRow = ElementInfo & { key: string }
 
 function Swatch({ value }: { value?: string }) {
 	return (
@@ -64,70 +42,6 @@ function Swatch({ value }: { value?: string }) {
 				borderColor: '#00000040',
 				backgroundColor: value ?? 'transparent',
 			}}
-		/>
-	)
-}
-
-function colorDetails(colors: StyleColor[]) {
-	return colors.map(color => {
-		const analysis = analyzeColor(color.value)
-		const names = [analysis.semantic, analysis.raw]
-			.filter(Boolean)
-			.concat(analysis.semanticMatches, analysis.rawMatches)
-		return {
-			key: color.key,
-			value: analysis.value ?? String(color.value),
-			label:
-				tokenLabel(analysis) +
-				(names.length > 1 ? ` (+${names.length - 1} more)` : ''),
-		}
-	})
-}
-
-function elementReport(element: { chain: string[]; colors: StyleColor[] }) {
-	return `Element: ${element.chain.join(' > ')}\n\n${element.colors
-		.map(color => {
-			const a = analyzeColor(color.value)
-			return `${color.key}: ${a.value ?? String(color.value)}\n  semantic: ${[a.semantic, ...a.semanticMatches].filter(Boolean).join(', ') || 'none'}\n  raw: ${[a.raw, ...a.rawMatches].filter(Boolean).join(', ') || 'none'}`
-		})
-		.join('\n')}`
-}
-
-function TokenRow({
-	entry,
-	expanded,
-	onPress,
-}: {
-	entry: TokenEntry
-	expanded: boolean
-	onPress: () => void
-}) {
-	const matches = tokensForValue(entry.value)
-	const others = [...matches.semantic, ...matches.raw].filter(
-		name => name !== entry.name,
-	)
-
-	return (
-		<TableRow
-			icon={<Swatch value={entry.value} />}
-			label={entry.name}
-			subLabel={
-				expanded
-					? [
-							`Value: ${entry.value}`,
-							others.length > 0
-								? `Same value: ${others.slice(0, 6).join(', ')}${others.length > 6 ? ` +${others.length - 6}` : ''}`
-								: 'Unique value.',
-							getMaps().semantic.has(entry.name)
-								? `Theme: semantic.${currentTheme()} (per base).`
-								: 'Theme: raw map.',
-							'Tap Tint to pick a color.',
-						].join('\n')
-					: `${entry.value} · tap to tint`
-			}
-			subLabelLineClamp={expanded ? 6 : 1}
-			trailing={expanded ? <TableRow.TrailingText text="Tint" /> : null}
-			onPress={onPress}
 		/>
 	)
 }
@@ -158,21 +72,9 @@ function ReportRow({
 
 export function ColorsTab() {
 	const [, rerender] = React.useReducer((count: number) => count + 1, 0)
-	const [filter, setFilter] = React.useState('')
-	const [expandedToken, setExpandedToken] = React.useState<string | null>(null)
 	const [expandedReport, setExpandedReport] = React.useState<number | null>(
 		null,
 	)
-	const [expandedElement, setExpandedElement] = React.useState<string | null>(
-		null,
-	)
-	const [elements, setElements] = React.useState<ElementRow[]>([])
-	const [scanning, setScanning] = React.useState(false)
-
-	const [shown, setShown] = React.useState(PAGE)
-	const [elemShown, setElemShown] = React.useState(ELEMENT_PAGE)
-
-	React.useEffect(() => setShown(PAGE), [filter])
 
 	React.useEffect(() => subscribe(rerender), [])
 
@@ -188,24 +90,6 @@ export function ColorsTab() {
 		} catch {}
 	}
 
-	const handleTokenPress = (entry: TokenEntry) => {
-		setExpandedToken(current => (current === entry.name ? null : entry.name))
-		openDiscordColorPicker({
-			color: rgbIntToHex(getLastPickedRgb()),
-			onSelect: hex => {
-				const found = highlightColor(entry.name, entry.name, entry.value, hex)
-				if (found <= 0) {
-					toast(`No visible elements use ${entry.name}.`)
-				} else {
-					toast(
-						`Tinting ${entry.name} in ${hex}: ${found} element${found === 1 ? '' : 's'} colored in place.`,
-						'success',
-					)
-				}
-			},
-		})
-	}
-
 	const handleReportPress = (report: Report) => {
 		if (expandedReport !== report.id) return setExpandedReport(report.id)
 		Clipboard.setString(reportToText(report, 'token'))
@@ -216,57 +100,6 @@ export function ColorsTab() {
 		forceRootUpdate()
 		toast('Refreshing the floating button…')
 	}
-
-	const handleScanElements = () => {
-		if (!hasFiberRoot()) {
-			toast('UI tree unavailable. Reload the plugin and try again.', 'critical')
-			return
-		}
-
-		setScanning(true)
-		try {
-			const found = scanColoredElements(MAX_ELEMENT_ROWS).map(element => ({
-				...element,
-				key: `${element.chain.join('>')}#${Math.random().toString(36).slice(2, 7)}`,
-			}))
-			setElements(found)
-		} finally {
-			setScanning(false)
-		}
-	}
-
-	const handleHighlightElement = (element: ElementRow) => {
-		const first = element.colors.find(color => color.normalized)
-		if (!first) return
-		const id = element.chain[0] ?? 'element'
-		openDiscordColorPicker({
-			color: rgbIntToHex(getLastPickedRgb()),
-			onSelect: hex => {
-				const found = highlightElement(element.chain, first.normalized, hex)
-				toast(
-					`Tinting ${id} in ${hex}: ${found} element${found === 1 ? '' : 's'} colored in place.`,
-					found > 0 ? 'success' : undefined,
-				)
-			},
-		})
-	}
-
-	const needle = filter.toLowerCase()
-	const semantic = semanticEntries().filter(
-		entry => needle === '' || entry.name.toLowerCase().includes(needle),
-	)
-	const raw = rawEntries().filter(
-		entry => needle === '' || entry.name.toLowerCase().includes(needle),
-	)
-
-	const renderToken = (entry: TokenEntry, kind: string) => (
-		<TokenRow
-			key={`${kind}:${entry.name}`}
-			entry={entry}
-			expanded={expandedToken === entry.name}
-			onPress={() => handleTokenPress(entry)}
-		/>
-	)
 
 	return (
 		<TabScreen>
@@ -343,8 +176,8 @@ export function ColorsTab() {
 			)}
 
 			<TableRowGroup
-				title="Theme colors"
-				description="Tap a token, pick a color, and every element using it is tinted."
+				title="Color browser"
+				description="Semantic and raw tokens with their values, and the elements on screen."
 			>
 				<TableRow
 					label="Current theme"
@@ -352,15 +185,27 @@ export function ColorsTab() {
 				/>
 				<TableRow
 					label="Semantic tokens"
+					subLabel="Tint any token and see which elements carry its color."
 					trailing={
 						<TableRow.TrailingText text={String(semanticEntries().length)} />
 					}
+					arrow
+					onPress={() => openColorsBrowser(0)}
 				/>
 				<TableRow
 					label="Raw tokens"
+					subLabel="The raw palette behind the semantic tokens."
 					trailing={
 						<TableRow.TrailingText text={String(rawEntries().length)} />
 					}
+					arrow
+					onPress={() => openColorsBrowser(1)}
+				/>
+				<TableRow
+					label="Elements"
+					subLabel="Scan the live UI tree and tint elements in place."
+					arrow
+					onPress={() => openColorsBrowser(2)}
 				/>
 				{!tokensAvailable() && (
 					<TableRow
@@ -389,111 +234,6 @@ export function ColorsTab() {
 						trailing={<TableRow.TrailingText text="Restore" />}
 						onPress={() => stopHighlight()}
 					/>
-				</TableRowGroup>
-			)}
-
-			<SearchField
-				value={filter}
-				onChange={setFilter}
-				placeholder="Filter tokens by name"
-			/>
-
-			<TableRowGroup title={`Semantic (${semantic.length})`} hasIcons>
-				{semantic.length === 0 ? (
-					<TableRow label="No semantic tokens matched." />
-				) : (
-					semantic.slice(0, shown).map(entry => renderToken(entry, 'semantic'))
-				)}
-				{semantic.length > shown && (
-					<TableRow
-						label={`Show ${Math.min(30, semantic.length - shown)} more (${semantic.length - shown} left)`}
-						arrow
-						onPress={() => setShown(value => value + 30)}
-					/>
-				)}
-			</TableRowGroup>
-
-			<TableRowGroup title={`Raw (${raw.length})`} hasIcons>
-				{raw.length === 0 ? (
-					<TableRow label="No raw tokens matched." />
-				) : (
-					raw.slice(0, shown).map(entry => renderToken(entry, 'raw'))
-				)}
-				{raw.length > shown && (
-					<TableRow
-						label={`Show ${Math.min(30, raw.length - shown)} more (${raw.length - shown} left)`}
-						arrow
-						onPress={() => setShown(value => value + 30)}
-					/>
-				)}
-			</TableRowGroup>
-
-			<TableRowGroup
-				title="UI elements"
-				description="Scan the live UI tree to see which semantic and raw colors each visible element uses."
-			>
-				<TableRow
-					label={scanning ? 'Scanning…' : 'Scan visible UI'}
-					subLabel="Elements on screen and the tokens behind their colors."
-					arrow
-					onPress={handleScanElements}
-				/>
-			</TableRowGroup>
-
-			{elements.length > 0 && (
-				<TableRowGroup title={`Elements (${elements.length})`}>
-					{elements.slice(0, elemShown).map(element => {
-						const expanded = expandedElement === element.key
-						const details = colorDetails(element.colors)
-						return (
-							<React.Fragment key={element.key}>
-								<TableRow
-									label={element.chain.join(' › ')}
-									subLabel={
-										expanded
-											? details
-													.map(
-														detail =>
-															`${detail.key}: ${detail.value}\n  ${detail.label}`,
-													)
-													.join('\n')
-											: details
-													.map(detail => `${detail.key}: ${detail.value}`)
-													.join(' · ')
-									}
-									subLabelLineClamp={expanded ? 20 : 2}
-									trailing={
-										expanded ? <TableRow.TrailingText text="Tint" /> : null
-									}
-									onPress={() => {
-										if (!expanded) {
-											setExpandedElement(element.key)
-											return
-										}
-										handleHighlightElement(element)
-										setExpandedElement(null)
-									}}
-								/>
-								{expanded && (
-									<TableRow
-										label="Copy full report"
-										trailing={<TableRow.TrailingText text="Copy" />}
-										onPress={() => {
-											Clipboard.setString(elementReport(element))
-											toast('Report copied.', 'success')
-										}}
-									/>
-								)}
-							</React.Fragment>
-						)
-					})}
-					{elements.length > elemShown && (
-						<TableRow
-							label={`Show ${Math.min(ELEMENT_PAGE, elements.length - elemShown)} more (${elements.length - elemShown} left)`}
-							arrow
-							onPress={() => setElemShown(value => value + ELEMENT_PAGE)}
-						/>
-					)}
 				</TableRowGroup>
 			)}
 

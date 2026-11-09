@@ -2,12 +2,27 @@ import type { JsonStorage } from '@valenced/json-storage'
 import type { LogEntry, SessionMeta } from './features/errlog'
 import type { InspectPrefs } from './features/inspect'
 
+type IconCacheState = {
+	auto?: boolean
+	lastRepair?: {
+		at: string
+		assetModules: number
+		cachedBefore: number
+		cachedAfter: number
+		missingRequired: string[]
+		initialised: number
+		failed: number
+		errors: string[]
+	}
+}
+
 export type DevLabState = {
 	enabled: boolean
 	inspect?: InspectPrefs
 	logs?: LogEntry[]
 	sessions?: SessionMeta[]
 	fluxEnabled?: boolean
+	iconCache?: IconCacheState
 }
 
 let storage: JsonStorage<DevLabState> | undefined
@@ -64,6 +79,10 @@ function normalizeState(value: unknown): DevLabState {
 			? raw.sessions.filter(isSession).slice(-MAX_SESSIONS)
 			: undefined,
 		fluxEnabled: raw.fluxEnabled === true,
+		iconCache:
+			raw.iconCache && typeof raw.iconCache === 'object'
+				? raw.iconCache
+				: undefined,
 	}
 }
 
@@ -121,4 +140,9 @@ export function saveLogs(logs: LogEntry[], sessions: SessionMeta[]) {
 export function saveFluxEnabled(fluxEnabled: boolean) {
 	const current = readCachedState()
 	return saveState({ ...current, fluxEnabled })
+}
+
+export function saveIconCache(iconCache: IconCacheState) {
+	const current = readCachedState()
+	return saveState({ ...current, iconCache })
 }
