@@ -35,6 +35,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Valenced/valenced
+          # Pinned to the API release this repo's catalog pins (app.valenced:api:1.0.0).
+          # Publishing HEAD publishes whatever apiVersion it declares, so when upstream bumps it
+          # the local artifacts no longer satisfy the catalog and Gradle falls through to GitHub
+          # Packages, which needs a read:packages token. Bump this ref and
+          # gradle/libs.versions.toml together.
+          ref: api@1.0.0
           path: valenced-src
 
       - name: Build the Valenced API from its public source
