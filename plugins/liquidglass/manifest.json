@@ -4,7 +4,7 @@
 	"name": "Liquid Glass",
 	"description": "real liquid glass over Discord's bars and floating surfaces: backdrop blur, SDF refraction, dispersion and light-driven edges",
 	"author": "shin <1381008677301129257> (https://github.com/fshinz/Valenced-Plugins-made-By-fshin \"Source code\")",
-	"version": "1.0.1",
+	"version": "1.0.2",
 	"icon": "CloudIcon",
 
 	"dependencies": {
