@@ -3,6 +3,30 @@
   "name": "shin's plugs",
   "description": ":3",
   "plugins": {
+    "com.liquidglass.themes": {
+      "name": "Liquid Glass",
+      "description": "Glass themes for Valenced: translucent panels with a light rim over a soft backdrop.",
+      "author": "Buffy",
+      "channels": {
+        "latest": "1.0.0"
+      },
+      "versions": {
+        "1.0.0": {
+          "url": "https://fshinz.github.io/sid/pool/com.liquidglass.themes@1.0.0.zip",
+          "sha256": "12320daca4f3cc92bacabed8684129f495f14673b28221771692f5b7e194b8d3",
+          "size": 114156,
+          "dependencies": {
+            "valenced.api": {
+              "version": ">=1 <2"
+            },
+            "discord": {
+              "version": "*"
+            },
+            "valenced.api.themes": {}
+          }
+        }
+      }
+    },
     "shin.black-themes": {
       "name": "black theme",
       "description": "just a cool black theme",
