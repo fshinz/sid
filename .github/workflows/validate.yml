@@ -48,7 +48,18 @@ jobs:
         run: ./gradlew :core:publishToMavenLocal :android:api:publishToMavenLocal -x test --no-daemon
 
       - name: Build all plugins
-        run: ./gradlew --no-daemon packageAllPlugins
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon packageAllPlugins 2>&1 | tee /tmp/gradle.log
+
+      - name: Post build errors on the pull request
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tail -n 140 /tmp/gradle.log > /tmp/tail.txt 2>/dev/null || echo "no build log" > /tmp/tail.txt
+          { echo "### Build errors"; echo '```'; cat /tmp/tail.txt; echo '```'; } > /tmp/body.md
+          gh pr comment "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --body-file /tmp/body.md
 
       - name: Generate index from built artifacts
         run: |

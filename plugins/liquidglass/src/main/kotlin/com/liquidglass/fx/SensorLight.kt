@@ -9,14 +9,16 @@ import android.os.Build
 import android.view.Surface
 import android.view.WindowManager
 
-internal class SensorLight(private val onLight: (x: Float, y: Float) -> Unit) : SensorEventListener {
+internal class SensorLight(
+	private val context: Context,
+	private val onLight: (x: Float, y: Float) -> Unit,
+) : SensorEventListener {
 	private var manager: SensorManager? = null
 	private var lastX = GlassEngine.DEFAULT_LIGHT_X
 	private var lastY = GlassEngine.DEFAULT_LIGHT_Y
 
 	fun start() {
-		val app = android.app.AndroidAppHelper.currentApplication() ?: return
-		val sensorManager = app.getSystemService(Context.SENSOR_SERVICE) as? SensorManager ?: return
+		val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager ?: return
 		val sensor = sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
 			?: sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
 			?: return
@@ -31,14 +33,9 @@ internal class SensorLight(private val onLight: (x: Float, y: Float) -> Unit) : 
 
 	override fun onSensorChanged(event: SensorEvent) {
 		val rotation = try {
-			val windowManager = android.app.AndroidAppHelper.currentApplication()
-				?.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
-			if (Build.VERSION.SDK_INT >= 30) {
-				windowManager?.defaultDisplay?.rotation ?: Surface.ROTATION_0
-			} else {
-				@Suppress("DEPRECATION")
-				windowManager?.defaultDisplay?.rotation ?: Surface.ROTATION_0
-			}
+			val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+			@Suppress("DEPRECATION")
+			windowManager?.defaultDisplay?.rotation ?: Surface.ROTATION_0
 		} catch (_: Throwable) {
 			Surface.ROTATION_0
 		}

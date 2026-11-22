@@ -1,6 +1,7 @@
 package com.liquidglass.fx
 
 import android.app.Activity
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.Drawable
@@ -42,6 +43,7 @@ internal data class GlassConfig(
 
 internal class GlassEngine(private val log: Logger) {
 	private val main = Handler(Looper.getMainLooper())
+	private var appContext: Context? = null
 	private var activityRef: WeakReference<Activity>? = null
 	private val hosts = ArrayList<Host>()
 	private var capture: Bitmap? = null
@@ -147,11 +149,18 @@ internal class GlassEngine(private val log: Logger) {
 
 	private fun updateSensor() {
 		if (config.sensor && sensorLight == null) {
-			sensorLight = SensorLight { x, y -> lightChanged(x, y) }.also { it.start() }
+			val context = appContext ?: return
+			sensorLight = SensorLight(context) { x, y -> lightChanged(x, y) }.also { it.start() }
 		} else if (!config.sensor) {
 			sensorLight?.stop()
 			sensorLight = null
 			lightChanged(DEFAULT_LIGHT_X, DEFAULT_LIGHT_Y)
+		}
+	}
+
+	fun attachContext(context: Context) {
+		main.post {
+			appContext = context.applicationContext
 		}
 	}
 

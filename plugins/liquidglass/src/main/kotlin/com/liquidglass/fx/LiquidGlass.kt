@@ -13,6 +13,7 @@ private var shutdown: (() -> Unit)? = null
 val liquidGlass = plugin {
 	start {
 		val engine = GlassEngine(log)
+		withAppContext { engine.attachContext(it) }
 		withAppActivity { engine.attach(it) }
 
 		registerNativeAsyncMethod("$ID.configure") { args ->
