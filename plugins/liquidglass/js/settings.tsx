@@ -1,8 +1,8 @@
 import { Design } from '@valenced/discord/design'
 import { React } from '@valenced/react'
 import { applyNow, clearAll, pushConfig, readStatus } from './native'
-import { normalizeGlass, PRESETS, readGlass, saveGlass } from './storage'
-import type { GlassState } from './native'
+import { normalizeGlass, PRESETS, saveGlass, useGlass } from './storage'
+import type { GlassState, GlassStatus } from './native'
 
 const {
 	Button,
@@ -40,11 +40,9 @@ function pathLabel(path: string): string {
 }
 
 export function GlassSettings() {
-	const [state, setState] = React.useState<GlassState>(() => readGlass())
+	const state = useGlass()
 	const [picker, setPicker] = React.useState<Picker>(undefined)
-	const [status, setStatus] = React.useState<Awaited<
-		ReturnType<typeof readStatus>
-	> | null>(null)
+	const [status, setStatus] = React.useState<GlassStatus | null>(null)
 
 	React.useEffect(() => {
 		void readStatus()
@@ -54,7 +52,6 @@ export function GlassSettings() {
 
 	const apply = (patch: Partial<GlassState>) => {
 		const next = normalizeGlass({ ...state, ...patch })
-		setState(next)
 		void saveGlass(next)
 		void pushConfig(next)
 			.then(() => readStatus())

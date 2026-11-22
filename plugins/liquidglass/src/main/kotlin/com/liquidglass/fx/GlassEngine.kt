@@ -47,7 +47,6 @@ internal class GlassEngine(private val log: Logger) {
 	private var activityRef: WeakReference<Activity>? = null
 	private val hosts = ArrayList<Host>()
 	private var capture: Bitmap? = null
-	private var blurred: Bitmap? = null
 	private var captureStamp = 0L
 	private var dirty = true
 	private var scanPending = false
@@ -212,16 +211,15 @@ internal class GlassEngine(private val log: Logger) {
 
 	internal fun backdrop(): Bitmap? {
 		val now = System.nanoTime()
-		if (!dirty && blurred != null && now - captureStamp < 33_000_000L) return blurred
-		if (hosts.isEmpty()) return blurred
-		val root = activityRef?.get()?.window?.decorView ?: return blurred
-		if (root.width == 0 || root.height == 0) return blurred
-		capture = capture(root, capture)
-		val source = capture ?: return blurred
-		blurred = GlassView.blurBitmap(source, config.blurDp * root.resources.displayMetrics.density * captureScale)
+		val current = capture
+		if (!dirty && current != null && now - captureStamp < 33_000_000L) return current
+		if (hosts.isEmpty()) return current
+		val root = activityRef?.get()?.window?.decorView ?: return current
+		if (root.width == 0 || root.height == 0) return current
+		capture = capture(root, current)
 		captureStamp = now
 		dirty = false
-		return blurred
+		return capture
 	}
 
 	private fun capture(root: View, reuse: Bitmap?): Bitmap {
@@ -362,38 +360,23 @@ internal class GlassEngine(private val log: Logger) {
 		val density = parent.resources.displayMetrics.density
 		val config = config
 		val halfH = candidate.view.height / 2f
-		val params = when (candidate.target) {
-			"top", "bottom" -> GlassParams(
-				radiusPx = 0f,
-				extendX = candidate.view.width * 0.75f,
-				extendY = 0f,
-				bevelPx = config.bevelDp * density,
-				refractPx = config.refractDp * density,
-				falloff = config.falloff,
-				dispersion = config.dispersion,
-				rim = config.rim,
-				dim = config.dim,
-				sat = config.sat,
-				adaptive = config.material == "regular",
-				tintColor = 0xFFFFFF,
-				tintColorAlpha = config.tint,
-			)
-			else -> GlassParams(
-				radiusPx = halfH.coerceAtMost(26f * density),
-				extendX = 0f,
-				extendY = 0f,
-				bevelPx = config.bevelDp * density,
-				refractPx = config.refractDp * density,
-				falloff = config.falloff,
-				dispersion = config.dispersion,
-				rim = config.rim,
-				dim = config.dim,
-				sat = config.sat,
-				adaptive = config.material == "regular",
-				tintColor = 0xFFFFFF,
-				tintColorAlpha = config.tint,
-			)
-		}
+		val rounded = candidate.target != "top" && candidate.target != "bottom"
+		val params = GlassParams(
+			radiusPx = if (rounded) halfH.coerceAtMost(26f * density) else 0f,
+			extendX = if (rounded) 0f else candidate.view.width * 0.75f,
+			extendY = 0f,
+			bevelPx = config.bevelDp * density,
+			refractPx = config.refractDp * density,
+			falloff = config.falloff,
+			dispersion = config.dispersion,
+			blurPx = config.blurDp * density,
+			rim = config.rim,
+			dim = config.dim,
+			sat = config.sat,
+			adaptive = config.material == "regular",
+			tintColor = 0xFFFFFF,
+			tintColorAlpha = config.tint,
+		)
 		val glass = GlassView(parent.context, this, params)
 		val background = candidate.view.background
 		candidate.view.background = null
