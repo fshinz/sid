@@ -13,6 +13,8 @@ import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import app.valenced.Logger
 import java.lang.ref.WeakReference
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 
 internal data class GlassConfig(
 	val enabled: Boolean = true,
@@ -120,7 +122,11 @@ internal class GlassEngine(private val log: Logger) {
 		return true
 	}
 
-	fun status(): Map<String, Any?> {
+	suspend fun status(): Map<String, Any?> = suspendCoroutine { continuation ->
+		main.post { continuation.resume(collectStatus()) }
+	}
+
+	private fun collectStatus(): Map<String, Any?> {
 		val path = if (Build.VERSION.SDK_INT >= 33) "shader" else if (Build.VERSION.SDK_INT >= 31) "blur" else "plain"
 		val applied = ArrayList<Map<String, Any?>>()
 		for (host in hosts) {
@@ -302,24 +308,25 @@ internal class GlassEngine(private val log: Logger) {
 		val w = decor.width.toFloat()
 		val h = decor.height.toFloat()
 		val density = decor.resources.displayMetrics.density
-		val barMin = 34f * density
-		val barMax = 104f * density
+		val barMin = 28f * density
+		val barMax = 150f * density
 		val found = ArrayList<Candidate>()
 
 		fun walk(view: View, depth: Int) {
-			if (depth > 14 || !view.isShown || view is GlassView) return
+			if (depth > 60 || !view.isShown || view is GlassView) return
 			val vw = view.width
 			val vh = view.height
 			if (vw > 0 && vh > 0) {
 				val loc = IntArray(2)
 				view.getLocationInWindow(loc)
 				val heightPx = vh.toFloat()
+				val bottomEdge = loc[1] + heightPx
 				val strip = heightPx in barMin..barMax
 				val target = when {
-					strip && vw >= w * 0.92f && loc[1] <= 96f * density -> "top"
-					strip && vw >= w * 0.92f && loc[1] + vh >= h - 24f * density -> "bottom"
-					strip && vw >= w * 0.72f && loc[1] + vh >= h * 0.55f && loc[1] + vh < h - 8f * density -> "input"
-					strip && vw >= w * 0.42f && loc[1] >= 96f * density && loc[1] + vh <= h - 64f * density -> "floating"
+					strip && vw >= w * 0.85f && loc[1] <= 150f * density -> "top"
+					strip && vw >= w * 0.85f && bottomEdge >= h - 170f * density -> "bottom"
+					strip && vw >= w * 0.6f && bottomEdge >= h * 0.55f && bottomEdge <= h - 20f * density -> "input"
+					strip && vw >= w * 0.4f && loc[1] + heightPx / 2f >= h * 0.15f && loc[1] + heightPx / 2f <= h * 0.85f -> "floating"
 					else -> null
 				}
 				if (target != null) {
@@ -327,7 +334,7 @@ internal class GlassEngine(private val log: Logger) {
 					found.add(Candidate(target, view, signature))
 				}
 			}
-			if (view is ViewGroup && depth < 14) {
+			if (view is ViewGroup && depth < 60) {
 				for (index in 0 until view.childCount) walk(view.getChildAt(index), depth + 1)
 			}
 		}
@@ -378,11 +385,15 @@ internal class GlassEngine(private val log: Logger) {
 			tintColorAlpha = config.tint,
 		)
 		val glass = GlassView(parent.context, this, params)
-		val background = candidate.view.background
-		candidate.view.background = null
-		parent.addView(glass, 0)
-		hosts.add(Host(candidate.target, candidate.view, glass, background, candidate.signature))
-		log.d { "glass on ${candidate.target} ${candidate.signature}" }
+		try {
+			val background = candidate.view.background
+			candidate.view.background = null
+			parent.addView(glass, 0)
+			hosts.add(Host(candidate.target, candidate.view, glass, background, candidate.signature))
+			log.d { "glass on ${candidate.target} ${candidate.signature}" }
+		} catch (error: Throwable) {
+			log.d { "glass attach failed ${candidate.signature}: $error" }
+		}
 	}
 
 	private fun Map<*, *>.num(key: String, def: Float): Float = (this[key] as? Number)?.toFloat() ?: def
