@@ -1,0 +1,26 @@
+{
+	"format": 1,
+	"id": "com.liquidglass.fx",
+	"name": "Liquid Glass",
+	"description": "real liquid glass over Discord's bars and floating surfaces: backdrop blur, SDF refraction, dispersion and light-driven edges",
+	"author": "shin <1381008677301129257> (https://github.com/fshinz/Valenced-Plugins-made-By-fshin \"Source code\")",
+	"version": "1.0.0",
+	"icon": "CloudIcon",
+
+	"dependencies": {
+		"valenced.api": {
+			"version": ">=1 <2"
+		},
+		"discord": {
+			"version": "*"
+		}
+	},
+
+	"dist": {
+		"script": "index.js",
+		"android": {
+			"path": "plugin.jar",
+			"class": "com.liquidglass.fx.LiquidGlass"
+		}
+	}
+}
