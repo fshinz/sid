@@ -9,7 +9,7 @@
       "author": "shin <1381008677301129257> (https://github.com/fshinz/Valenced-Plugins-made-By-fshin \"Source code\")",
       "icon": "CloudIcon",
       "channels": {
-        "latest": "1.0.1"
+        "latest": "1.0.2"
       },
       "versions": {
         "1.0.0": {
@@ -29,6 +29,19 @@
           "url": "https://fshinz.github.io/sid/pool/com.liquidglass.fx@1.0.1.zip",
           "sha256": "5db5b567a0123fb8d38b05247b47dc0fd4c5887caae522356be8105bb196222f",
           "size": 30178,
+          "dependencies": {
+            "valenced.api": {
+              "version": ">=1 <2"
+            },
+            "discord": {
+              "version": "*"
+            }
+          }
+        },
+        "1.0.2": {
+          "url": "https://fshinz.github.io/sid/pool/com.liquidglass.fx@1.0.2.zip",
+          "sha256": "c873c05bd4e237ecb3c66aecb62f1236e11fb6a705c9a88bb4e61532baab6b53",
+          "size": 30990,
           "dependencies": {
             "valenced.api": {
               "version": ">=1 <2"
