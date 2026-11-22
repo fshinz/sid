@@ -3,6 +3,30 @@
   "name": "shin's plugs",
   "description": ":3",
   "plugins": {
+    "com.liquidglass.fx": {
+      "name": "Liquid Glass",
+      "description": "real liquid glass over Discord's bars and floating surfaces: backdrop blur, SDF refraction, dispersion and light-driven edges",
+      "author": "shin <1381008677301129257> (https://github.com/fshinz/Valenced-Plugins-made-By-fshin \"Source code\")",
+      "icon": "CloudIcon",
+      "channels": {
+        "latest": "1.0.0"
+      },
+      "versions": {
+        "1.0.0": {
+          "url": "https://fshinz.github.io/sid/pool/com.liquidglass.fx@1.0.0.zip",
+          "sha256": "0167dad62c4a4675069f835a80e723bf6eef0269b8431ca4c9d1bd5365d4ec9d",
+          "size": 29647,
+          "dependencies": {
+            "valenced.api": {
+              "version": ">=1 <2"
+            },
+            "discord": {
+              "version": "*"
+            }
+          }
+        }
+      }
+    },
     "com.liquidglass.themes": {
       "name": "Liquid Glass",
       "description": "Glass themes for Valenced: translucent panels with a light rim over a soft backdrop.",
