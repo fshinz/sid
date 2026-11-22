@@ -110,31 +110,18 @@ export function normalizeGlass(value: unknown): GlassState {
 	}
 }
 
-export function readGlass(): GlassState {
+export function useGlass(): GlassState {
 	return normalizeGlass(storage?.use()?.glass)
 }
 
-async function waitUntilLoaded() {
-	if (!storage) return
-	for (
-		let waited = 0;
-		storage.loaded === false && waited < 5000;
-		waited += 25
-	) {
-		await new Promise(resolve => setTimeout(resolve, 25))
-	}
-	if (storage.loaded === false) await storage.get?.()
-}
-
-export async function readGlassWhenLoaded(): Promise<GlassState> {
-	await waitUntilLoaded()
-	return normalizeGlass(storage?.use()?.glass)
+export function readGlassFrom(doc: StorageState | undefined): GlassState {
+	return normalizeGlass(doc?.glass)
 }
 
 export function saveGlass(next: GlassState): Promise<unknown> {
 	const job = writeQueue.then(async () => {
 		if (!storage) return
-		await waitUntilLoaded()
+		if (storage.loaded === false) await storage.get()
 		const normalized = normalizeGlass(next)
 		const root: StorageState = { ...(storage.cache ?? {}), glass: normalized }
 		storage.cache = root

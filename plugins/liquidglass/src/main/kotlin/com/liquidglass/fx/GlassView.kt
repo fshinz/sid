@@ -21,6 +21,7 @@ internal data class GlassParams(
 	val refractPx: Float,
 	val falloff: Float,
 	val dispersion: Float,
+	val blurPx: Float,
 	val rim: Float,
 	val dim: Float,
 	val sat: Float,
@@ -29,7 +30,7 @@ internal data class GlassParams(
 	val tintColorAlpha: Float,
 ) {
 	fun signature(): String =
-		"$radiusPx|$extendX|$extendY|$bevelPx|$refractPx|$falloff|$dispersion|$rim|$dim|$sat|$adaptive|$tintColor|$tintColorAlpha"
+		"$radiusPx|$extendX|$extendY|$bevelPx|$refractPx|$falloff|$dispersion|$blurPx|$rim|$dim|$sat|$adaptive|$tintColor|$tintColorAlpha"
 }
 
 internal class GlassView(context: Context, private val engine: GlassEngine, var params: GlassParams) : View(context) {
@@ -37,8 +38,10 @@ internal class GlassView(context: Context, private val engine: GlassEngine, var 
 	private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 	private val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 	private var runtimeShader: RuntimeShader? = null
-	private var renderNode: RenderNode? = null
+	private var lensNode: RenderNode? = null
+	private var blurNode: RenderNode? = null
 	private var effectSignature = ""
+	private var blurSignature = ""
 	private var shaderBroken = false
 	private var lightX = 0.866f
 	private var lightY = 0.5f
@@ -75,22 +78,32 @@ internal class GlassView(context: Context, private val engine: GlassEngine, var 
 		if (src.width() <= 0 || src.height() <= 0) return
 		val dst = RectF(0f, 0f, width.toFloat(), height.toFloat())
 
-		val effect = ensureEffect()
-		if (effect != null) {
-			val node = obtainNode()
-			node.setPosition(0, 0, width, height)
-			node.setRenderEffect(effect)
-			val recorder = node.beginRecording()
-			recorder.drawBitmap(backdrop, src, dst, bitmapPaint)
-			node.endRecording()
-			canvas.drawRenderNode(node)
-			return
+		if (canvas.isHardwareAccelerated) {
+			val effect = ensureEffect()
+			if (effect != null) {
+				val node = obtainLensNode()
+				node.setPosition(0, 0, width, height)
+				node.setRenderEffect(effect)
+				val recorder = node.beginRecording()
+				recordBackdrop(recorder, backdrop, src, dst)
+				node.endRecording()
+				canvas.drawRenderNode(node)
+				return
+			}
+			if (Build.VERSION.SDK_INT >= 31) {
+				recordBackdrop(canvas, backdrop, src, dst)
+				return
+			}
 		}
+		drawFallback(canvas, backdrop, src, dst)
+	}
 
+	private fun drawFallback(canvas: Canvas, backdrop: Bitmap, src: Rect, dst: RectF) {
+		val soft = softBlur(backdrop)
 		val radius = radiusPx()
 		canvas.save()
 		canvas.clipRect(dst)
-		canvas.drawBitmap(backdrop, src, dst, bitmapPaint)
+		canvas.drawBitmap(soft, src, dst, bitmapPaint)
 		val alpha = (params.dim.coerceIn(0f, 1f) * 255).toInt()
 		fillPaint.color = (params.tintColor and 0x00FFFFFF) or (alpha shl 24)
 		if (radius > 0f) {
@@ -110,13 +123,39 @@ internal class GlassView(context: Context, private val engine: GlassEngine, var 
 		canvas.restore()
 	}
 
+	private fun recordBackdrop(target: Canvas, backdrop: Bitmap, src: Rect, dst: RectF) {
+		val blur = obtainBlurNode()
+		val recorder = blur.beginRecording()
+		recorder.drawBitmap(backdrop, src, dst, bitmapPaint)
+		blur.endRecording()
+		target.drawRenderNode(blur)
+	}
+
 	private fun radiusPx(): Float = params.radiusPx.coerceAtMost(minOf(width, height) / 2f)
 
-	private fun obtainNode(): RenderNode {
-		val current = renderNode
+	private fun obtainLensNode(): RenderNode {
+		val current = lensNode
 		if (current != null) return current
-		val node = RenderNode("liquidglass")
-		renderNode = node
+		val node = RenderNode("liquidglass-lens")
+		lensNode = node
+		return node
+	}
+
+	private fun obtainBlurNode(): RenderNode {
+		val signature = "${params.blurPx}"
+		val current = blurNode
+		if (current != null && signature == blurSignature) return current
+		val node = current ?: RenderNode("liquidglass-blur").also { blurNode = it }
+		if (Build.VERSION.SDK_INT >= 31) {
+			node.setRenderEffect(
+				RenderEffect.createBlurEffect(
+					params.blurPx.coerceAtLeast(0.5f),
+					params.blurPx.coerceAtLeast(0.5f),
+					Shader.TileMode.CLAMP,
+				),
+			)
+		}
+		blurSignature = signature
 		return node
 	}
 
@@ -164,19 +203,17 @@ internal class GlassView(context: Context, private val engine: GlassEngine, var 
 	}
 
 	companion object {
-		fun blurBitmap(source: Bitmap, radiusPx: Float): Bitmap {
-			if (Build.VERSION.SDK_INT < 31 || radiusPx <= 0.5f) return source
+		fun softBlur(source: Bitmap): Bitmap {
+			val sw = (source.width / 6).coerceAtLeast(2)
+			val sh = (source.height / 6).coerceAtLeast(2)
+			val small = Bitmap.createBitmap(sw, sh, Bitmap.Config.ARGB_8888)
+			val smallCanvas = Canvas(small)
+			val scalePaint = Paint(Paint.FILTER_BITMAP_FLAG)
+			smallCanvas.scale(sw.toFloat() / source.width, sh.toFloat() / source.height)
+			smallCanvas.drawBitmap(source, 0f, 0f, scalePaint)
 			val out = Bitmap.createBitmap(source.width, source.height, Bitmap.Config.ARGB_8888)
-			val node = RenderNode("liquidglass-blur")
-			node.setPosition(0, 0, source.width, source.height)
-			node.setRenderEffect(
-				RenderEffect.createBlurEffect(radiusPx, radiusPx, Shader.TileMode.CLAMP),
-			)
-			val recorder = node.beginRecording()
-			recorder.drawBitmap(source, 0f, 0f, null)
-			node.endRecording()
-			val canvas = Canvas(out)
-			canvas.drawRenderNode(node)
+			val outCanvas = Canvas(out)
+			outCanvas.drawBitmap(small, null, Rect(0, 0, source.width, source.height), scalePaint)
 			return out
 		}
 	}

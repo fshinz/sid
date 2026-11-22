@@ -1,6 +1,6 @@
 import { clearAll, pushConfig } from './native'
 import { GlassSettings } from './settings'
-import { bindStorage, readGlassWhenLoaded } from './storage'
+import { bindStorage, readGlassFrom } from './storage'
 import type { StorageState } from './storage'
 
 export default plugin<{ jsonStorage: StorageState }>({
@@ -14,8 +14,9 @@ export default plugin<{ jsonStorage: StorageState }>({
 	start({ cleanup, jsonStorage, logger }) {
 		bindStorage(jsonStorage)
 
-		void readGlassWhenLoaded()
-			.then(state => pushConfig(state))
+		void jsonStorage
+			.get()
+			.then(doc => pushConfig(readGlassFrom(doc)))
 			.catch(error => logger.log(`glass configure failed: ${String(error)}`))
 
 		cleanup(() => {
