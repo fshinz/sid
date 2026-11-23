@@ -1,0 +1,14 @@
+[package]
+name = "valenced-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "valenced"
+path = "src/main.rs"
+
+[dependencies]
+valenced-core = { path = "../core" }
+valenced-patch = { path = "../patch" }
+valenced-pool = { path = "../pool" }

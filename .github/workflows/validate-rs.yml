@@ -1,0 +1,44 @@
+# Rust workspace validation for the Valenced rewrite in valenced-rs/.
+
+name: Validate Rust
+
+on:
+  pull_request:
+    paths:
+      - 'valenced-rs/**'
+      - '.github/workflows/validate-rs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'valenced-rs/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build
+        run: |
+          set -o pipefail
+          cargo build --workspace --manifest-path valenced-rs/Cargo.toml 2>&1 | tee /tmp/cargo.log
+
+      - name: Test
+        run: |
+          set -o pipefail
+          cargo test --workspace --manifest-path valenced-rs/Cargo.toml 2>&1 | tee -a /tmp/cargo.log
+
+      - name: Post build errors on the pull request
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tail -n 140 /tmp/cargo.log > /tmp/tail.txt 2>/dev/null || echo "no build log" > /tmp/tail.txt
+          { echo "### Cargo errors"; echo '```'; cat /tmp/tail.txt; echo '```'; } > /tmp/body.md
+          gh pr comment "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --body-file /tmp/body.md
