@@ -150,7 +150,7 @@ fn skip_space(bytes: &[u8], at: &mut usize) {
 
 fn parse_value(bytes: &[u8], at: &mut usize, depth: usize) -> Result<Json, Error> {
 	if depth > MAX_DEPTH {
-		return Err(err(bytes, at, "nesting too deep"));
+		return Err(err(bytes, *at, "nesting too deep"));
 	}
 	match bytes.get(*at) {
 		None => Err(err(bytes, *at, "unexpected end")),
