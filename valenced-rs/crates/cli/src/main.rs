@@ -85,7 +85,7 @@ fn plan_cmd(args: &[String]) -> Result<String, Error> {
 	let mut out = String::new();
 	for step in &plan.steps {
 		out.push_str(&format!(
-			"{} {} {} bytes {} {}\n",
+			"{} {} {} {} {}\n",
 			step.id, step.version, step.size, step.sha256, step.url
 		));
 	}
