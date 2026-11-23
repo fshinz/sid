@@ -192,12 +192,14 @@ impl Script {
 }
 
 fn read_expect(value: &Json, index: usize) -> Result<usize, Error> {
-	value
+	let raw = value
 		.get("expect")
 		.and_then(|v| v.as_num())
-		.ok_or_else(|| Error::new(format!("script: op {index} needs expect")))?
-		.try_into()
-		.map_err(|_| Error::new(format!("script: op {index} has a bad expect")))
+		.ok_or_else(|| Error::new(format!("script: op {index} needs expect")))?;
+	if raw < 0.0 || raw.fract() != 0.0 || raw > 1e9 {
+		return Err(Error::new(format!("script: op {index} has a bad expect")));
+	}
+	Ok(raw as usize)
 }
 
 #[cfg(test)]
