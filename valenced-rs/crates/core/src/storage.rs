@@ -92,10 +92,13 @@ mod tests {
 	#[test]
 	fn replace_resets_to_defaults() {
 		let mut storage = Storage::new(json::parse(r#"{"a": 1, "b": 2}"#).unwrap());
+		storage.set(&json::parse(r#"{"x": 5}"#).unwrap(), false);
+		assert_eq!(storage.get().get("x").unwrap().as_num(), Some(5.0));
 		storage.set(&json::parse(r#"{"c": 3}"#).unwrap(), true);
-		assert!(storage.get().get("b").unwrap().is_null());
-		assert_eq!(storage.get().get("c").unwrap().as_num(), Some(3.0));
+		assert!(storage.get().get("x").is_none());
 		assert_eq!(storage.get().get("a").unwrap().as_num(), Some(1.0));
+		assert_eq!(storage.get().get("b").unwrap().as_num(), Some(2.0));
+		assert_eq!(storage.get().get("c").unwrap().as_num(), Some(3.0));
 	}
 
 	#[test]
