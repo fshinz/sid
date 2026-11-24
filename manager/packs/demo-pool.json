@@ -1,0 +1,38 @@
+{
+	"format": 1,
+	"plugins": [
+		{
+			"id": "example",
+			"version": "1.0.0",
+			"name": "Example",
+			"description": "Sample plugin showing the settings surface",
+			"author": "valenced",
+			"channels": {
+				"stable": {
+					"url": "data:text/javascript,export%20function%20start()%20%7B%20phoenix.settings.register(%7B%20title%3A%20%22Example%22%20%7D)%20%7D",
+					"size": 0,
+					"sha256": ""
+				}
+			}
+		},
+		{
+			"id": "console-greeter",
+			"version": "1.0.0",
+			"name": "Console Greeter",
+			"description": "Prints a line when the gateway connects",
+			"author": "valenced",
+			"channels": {
+				"stable": {
+					"url": "data:text/javascript,phoenix.on(%22gateway.ready%22%2C%20()%20%3D%3E%20console.log(%22valenced%20ready%22))",
+					"size": 0,
+					"sha256": ""
+				},
+				"canary": {
+					"url": "data:text/javascript,phoenix.on(%22gateway.ready%22%2C%20()%20%3D%3E%20console.log(%22valenced%20ready%20canary%22))",
+					"size": 0,
+					"sha256": ""
+				}
+			}
+		}
+	]
+}

@@ -1,0 +1,20 @@
+{
+	"format": 1,
+	"id": "example-access-gate",
+	"target": "356207",
+	"steps": [
+		{
+			"file": "lib/arm64-v8a/liblibdiscord_wasm_host.so",
+			"op": "assert",
+			"text": "liblibdiscord_wasm_host",
+			"expect": 1
+		},
+		{
+			"file": "lib/arm64-v8a/liblog.so",
+			"op": "rename_needed",
+			"from": "liblog.so",
+			"to": "libvld.so",
+			"expect": 1
+		}
+	]
+}

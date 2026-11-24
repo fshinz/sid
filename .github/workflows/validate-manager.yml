@@ -1,0 +1,47 @@
+name: Validate Manager
+
+on:
+  pull_request:
+    paths:
+      - "manager/**"
+      - ".github/workflows/validate-manager.yml"
+  push:
+    branches:
+      - main
+      - "arena/**"
+    paths:
+      - "manager/**"
+      - ".github/workflows/validate-manager.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install typescript
+        run: npm install -g typescript
+      - name: Typecheck
+        run: tsc -p manager/tsconfig.json
+      - name: Test
+        run: |
+          set -o pipefail
+          bun test manager/tests 2>&1 | tee /tmp/bun.log
+      - name: Relay errors
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "### Manager check errors"
+            echo '```'
+            tail -n 140 /tmp/bun.log
+            echo '```'
+          } > /tmp/comment.md
+          number=$(jq --raw-output .number "$GITHUB_EVENT_PATH")
+          if [ -n "$number" ] && [ "$number" != "null" ]; then
+            gh pr comment "$number" --body-file /tmp/comment.md
+          fi
