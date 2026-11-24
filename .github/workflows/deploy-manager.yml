@@ -1,0 +1,36 @@
+name: Deploy Manager
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "manager/**"
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Build
+        run: bun manager/build.ts
+      - name: Deploy to pages
+        run: |
+          url="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git clone --depth 1 --branch gh-pages "$url" /tmp/ghp
+          rm -rf /tmp/ghp/manager
+          mkdir -p /tmp/ghp/manager
+          cp -r manager/dist/. /tmp/ghp/manager/
+          cd /tmp/ghp
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add -A
+          git diff --cached --quiet || git commit -m "deploy valenced manager"
+          git push origin gh-pages
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

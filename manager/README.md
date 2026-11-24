@@ -4,6 +4,10 @@ Browser manager for the Valenced Phoenix build. It downloads the main files, tak
 patch pack you pick, runs the patches at the end over the merged build, and hands back a signed APK.
 Everything runs client side, nothing is uploaded.
 
+Live at **https://fshinz.github.io/sid/manager/**. It is a website, no install needed, and it is not
+an APK. The static build in `dist` is what runs there, redeployed automatically on changes to `main`
+by `.github/workflows/deploy-manager.yml`.
+
 ## Flow
 
 1. Main files. Pick the Discord split APKs you downloaded (base, config splits). Automatic download
